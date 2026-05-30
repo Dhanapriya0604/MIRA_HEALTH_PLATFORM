@@ -6,7 +6,8 @@ def predict_health_condition(full_name: str, date_of_birth: str, glucose: float,
     Uses Claude AI (via Anthropic API) to generate a health risk prediction
     based on patient blood test results.
     """
-    client = anthropic.Anthropic()
+    import streamlit as st
+    client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
 
     prompt = f"""You are a medical AI assistant. Analyze the following patient blood test results and provide a structured health assessment.
 
