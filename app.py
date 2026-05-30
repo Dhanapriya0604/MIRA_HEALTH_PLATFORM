@@ -518,33 +518,59 @@ if nav == "Dashboard":
         with col_left:
             st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
             df = pd.DataFrame(patients)
+
+            # Normalise to % of clinical reference ceiling so all three are comparable
+            GLUCOSE_MAX     = 300.0
+            CHOLESTEROL_MAX = 300.0
+            HAEMO_MAX       = 20.0
+
+            names  = df['full_name'].tolist()
+            g_pct  = (df['glucose']     / GLUCOSE_MAX     * 100).tolist()
+            c_pct  = (df['cholesterol'] / CHOLESTEROL_MAX * 100).tolist()
+            h_pct  = (df['haemoglobin'] / HAEMO_MAX       * 100).tolist()
+            g_raw  = df['glucose'].tolist()
+            c_raw  = df['cholesterol'].tolist()
+            h_raw  = df['haemoglobin'].tolist()
+
             fig = go.Figure()
-            palette = [
-                ("#1a56db", "Glucose (mg/dL)"),
-                ("#d97706", "Cholesterol (mg/dL)"),
-                ("#059669", "Haemoglobin (g/dL)"),
+            bar_cfg = [
+                ("#1a56db", "Glucose",     g_pct, g_raw, "mg/dL"),
+                ("#d97706", "Cholesterol", c_pct, c_raw, "mg/dL"),
+                ("#059669", "Haemoglobin", h_pct, h_raw, "g/dL"),
             ]
-            keys = ["glucose", "cholesterol", "haemoglobin"]
-            for (color, name), key in zip(palette, keys):
-                fig.add_trace(go.Scatter(
-                    x=df['full_name'], y=df[key],
-                    name=name, mode='lines+markers',
-                    line=dict(color=color, width=2.5),
-                    marker=dict(size=7, color=color,
-                                line=dict(color='white', width=1.5))
+            for color, name, pct, raw, unit in bar_cfg:
+                fig.add_trace(go.Bar(
+                    name=name,
+                    x=names,
+                    y=pct,
+                    text=[f"{v} {unit}" for v in raw],
+                    textposition='outside',
+                    textfont=dict(size=10, color='#475569'),
+                    marker=dict(color=color, opacity=0.88,
+                                line=dict(color='white', width=1.5)),
+                    hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{customdata}} {unit}<extra></extra>",
+                    customdata=raw
                 ))
+
             fig.update_layout(
-                paper_bgcolor='white', plot_bgcolor='#f8fafc',
+                barmode='group',
+                paper_bgcolor='white', plot_bgcolor='white',
                 font=dict(color='#475569', family='DM Sans', size=11),
-                legend=dict(bgcolor='white', bordercolor='#e2e8f0',
-                            borderwidth=1, font=dict(size=11)),
+                legend=dict(bgcolor='white', bordercolor='#e2e8f0', borderwidth=1,
+                            font=dict(size=11), orientation='h',
+                            yanchor='bottom', y=1.02, xanchor='right', x=1),
                 xaxis=dict(showgrid=False, linecolor='#e2e8f0',
-                           tickfont=dict(size=10)),
-                yaxis=dict(showgrid=False, linecolor='#e2e8f0'),
-                margin=dict(l=0, r=0, t=10, b=0),
-                height=300
+                           tickfont=dict(size=11, color='#0f172a')),
+                yaxis=dict(showgrid=False, showticklabels=False,
+                           range=[0, 130]),
+                bargap=0.25, bargroupgap=0.08,
+                margin=dict(l=0, r=0, t=36, b=0),
+                height=320
             )
             st.plotly_chart(fig, use_container_width=True)
+            st.markdown("""<div style='font-size:0.72rem;color:#94a3b8;text-align:right;margin-top:-8px;'>
+                Bars normalised to % of reference ceiling — hover for actual values
+            </div>""", unsafe_allow_html=True)
 
         with col_right:
             st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
@@ -663,17 +689,90 @@ elif nav == "View Records":
         for p in patients:
             risk = get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol'])
             with st.expander(f"#{p['id']}  —  {p['full_name']}  |  {risk}"):
-                c1, c2, c3 = st.columns(3)
+                # Patient meta info
+                c1, c2 = st.columns(2)
                 c1.markdown(f"**Email:** {p['email']}")
                 c1.markdown(f"**Date of Birth:** {p['date_of_birth']}")
-                c2.markdown(f"**Glucose:** {p['glucose']} mg/dL")
-                c2.markdown(f"**Haemoglobin:** {p['haemoglobin']} g/dL")
-                c3.markdown(f"**Cholesterol:** {p['cholesterol']} mg/dL")
-                c3.markdown(f"**Added:** {p['created_at'][:10]}")
+                c2.markdown(f"**Added:** {p['created_at'][:10]}")
+
+                st.markdown("<div class='mira-divider'></div>", unsafe_allow_html=True)
+
+                # Gauge charts — one per parameter
+                def make_gauge(value, label, unit, low_ok, high_ok, max_val, color):
+                    if value < low_ok:
+                        status = "Low"
+                        bar_color = "#d97706"
+                    elif value <= high_ok:
+                        status = "Normal"
+                        bar_color = "#059669"
+                    else:
+                        status = "High"
+                        bar_color = "#dc2626"
+
+                    fig_g = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=value,
+                        number=dict(
+                            suffix=f" {unit}",
+                            font=dict(size=20, family='DM Mono', color='#0f172a')
+                        ),
+                        title=dict(
+                            text=f"<b>{label}</b><br><span style='font-size:11px;color:{bar_color}'>{status}</span>",
+                            font=dict(size=13, family='DM Sans', color='#475569')
+                        ),
+                        gauge=dict(
+                            axis=dict(
+                                range=[0, max_val],
+                                tickfont=dict(size=9, color='#94a3b8'),
+                                tickcolor='#e2e8f0',
+                                showticklabels=True
+                            ),
+                            bar=dict(color=bar_color, thickness=0.6),
+                            bgcolor='#f1f5f9',
+                            borderwidth=0,
+                            steps=[
+                                dict(range=[0, low_ok],         color='#fef9ec'),
+                                dict(range=[low_ok, high_ok],   color='#ecfdf5'),
+                                dict(range=[high_ok, max_val],  color='#fef2f2'),
+                            ],
+                            threshold=dict(
+                                line=dict(color=color, width=2),
+                                thickness=0.75,
+                                value=value
+                            )
+                        )
+                    ))
+                    fig_g.update_layout(
+                        paper_bgcolor='white',
+                        margin=dict(l=16, r=16, t=56, b=16),
+                        height=200
+                    )
+                    return fig_g
+
+                gc1, gc2, gc3 = st.columns(3)
+                with gc1:
+                    st.plotly_chart(
+                        make_gauge(p['glucose'], "Glucose", "mg/dL",
+                                   70, 99, 300, "#1a56db"),
+                        use_container_width=True, key=f"g_{p['id']}"
+                    )
+                with gc2:
+                    st.plotly_chart(
+                        make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL",
+                                   12.0, 17.5, 20, "#059669"),
+                        use_container_width=True, key=f"h_{p['id']}"
+                    )
+                with gc3:
+                    st.plotly_chart(
+                        make_gauge(p['cholesterol'], "Cholesterol", "mg/dL",
+                                   0, 200, 300, "#d97706"),
+                        use_container_width=True, key=f"c_{p['id']}"
+                    )
+
                 if p.get('remarks'):
                     clean = p['remarks'].replace('**','').replace('*','').replace('??','').strip()
                     st.markdown(f"""
-                    <div class='remarks-box' style='margin-top:12px;'>
+                    <div class='remarks-box' style='margin-top:4px;'>
                         <strong style='color:#1a56db;font-size:0.75rem;letter-spacing:1px;
                                        text-transform:uppercase;'>AI Remarks</strong>
                         <div style='margin-top:8px;'>{clean}</div>
