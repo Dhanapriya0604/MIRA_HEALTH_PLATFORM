@@ -3,23 +3,18 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import date, datetime
-
 from database import init_db, create_patient, read_all_patients, read_patient_by_id, update_patient, delete_patient, search_patients
 from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
 
-# ─── PAGE CONFIG ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MIRA – Medical Intelligence",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# ─── INIT DB ────────────────────────────────────────────────────────────────────
 init_db()
 
-# ─── CUSTOM CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
@@ -296,7 +291,6 @@ Medical Intelligence & Risk Prediction Platform
 </div>
 """, unsafe_allow_html=True)
 
-# ─── SIDEBAR ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
     <div style='text-align:center; padding: 20px 0 10px 0;'>
@@ -311,23 +305,22 @@ with st.sidebar:
 
     nav = st.radio(
         "Navigation",
-        ["🏠 Dashboard", "➕ Add Patient", "📋 View Records", "✏️ Update Record", "🗑️ Delete Record"],
+        ["Home", " Add Patient", "View Records", "Update Record", "Delete Record"],
         label_visibility="collapsed"
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
     <div style='background:#162032; border:1px solid #1e3a5f; border-radius:10px; padding:14px; font-size:0.78rem; color:#64748b;'>
-        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>⚕️ AI Engine</div>
+        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>AI Engine</div>
         Powered by Claude AI (Anthropic)<br><br>
-        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>🗄️ Storage</div>
+        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>Storage</div>
         SQLite — Persistent Local DB<br><br>
-        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>🔬 Parameters</div>
+        <div style='color:#0ea5e9; font-weight:600; margin-bottom:8px;'>Parameters</div>
         Glucose · Haemoglobin · Cholesterol
     </div>
     """, unsafe_allow_html=True)
 
-# ─── HEADER ─────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class='mira-header'>
     <div class='mira-logo-text'>MIRA</div>
@@ -335,17 +328,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════════
-# 🏠 DASHBOARD
-# ════════════════════════════════════════════════════════════════════════════════
-if nav == "🏠 Dashboard":
+if nav == "Home":
     patients = read_all_patients()
     total = len(patients)
     high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     moderate = sum(1 for p in patients if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     healthy = sum(1 for p in patients if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
 
-    # Metrics
     c1, c2, c3, c4 = st.columns(4)
     for col, val, label, color in zip(
         [c1, c2, c3, c4],
@@ -388,17 +377,15 @@ if nav == "🏠 Dashboard":
                 marker=dict(size=8, color='#10b981')
             ))
             fig.update_layout(
-                paper_bgcolor='#1e293b', plot_bgcolor='#162032',
-                font=dict(color='#94a3b8', size=11),
-                legend=dict(bgcolor='#1e293b', bordercolor='#334155'),
-                xaxis=dict(gridcolor='#334155', showgrid=True),
-                yaxis=dict(gridcolor='#334155', showgrid=True),
-                margin=dict(l=0, r=0, t=10, b=0), height=300
+                paper_bgcolor='#1e293b',
+                plot_bgcolor='#162032',
+                xaxis=dict(showgrid=False, zeroline=False),
+                yaxis=dict(showgrid=False, zeroline=False),
             )
             st.plotly_chart(fig, use_container_width=True)
 
         with col_right:
-            st.markdown("<div class='section-title'>🎯 Risk Distribution</div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
             labels = ['Healthy', 'Moderate Risk', 'High Risk']
             values = [healthy, moderate, high_risk]
             colors = ['#10b981', '#f59e0b', '#ef4444']
@@ -436,11 +423,8 @@ if nav == "🏠 Dashboard":
             <div style='color:#64748b; margin-top:8px;'>Use "Add Patient" to register your first patient</div>
         </div>""", unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════════
-# ➕ ADD PATIENT
-# ════════════════════════════════════════════════════════════════════════════════
-elif nav == "➕ Add Patient":
-    st.markdown("<div class='section-title'>➕ Register New Patient</div>", unsafe_allow_html=True)
+elif nav == "Add Patient":
+    st.markdown("<div class='section-title'>Register New Patient</div>", unsafe_allow_html=True)
 
     with st.form("add_patient_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -468,7 +452,7 @@ elif nav == "➕ Add Patient":
             for e in errors:
                 st.error(f"⚠️ {e}")
         else:
-            with st.spinner("🤖 MIRA AI is analyzing patient data..."):
+            with st.spinner("MIRA AI is analyzing patient data..."):
                 try:
                     remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
                     patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
@@ -491,10 +475,7 @@ elif nav == "➕ Add Patient":
                 except Exception as ex:
                     st.error(f"❌ AI Analysis failed: {str(ex)}")
 
-# ════════════════════════════════════════════════════════════════════════════════
-# 📋 VIEW RECORDS
-# ════════════════════════════════════════════════════════════════════════════════
-elif nav == "📋 View Records":
+elif nav == "View Records":
     st.markdown("<div class='section-title'>📋 Patient Records</div>", unsafe_allow_html=True)
 
     search_query = st.text_input("🔍 Search by name or email", placeholder="Type to search...")
@@ -509,22 +490,19 @@ elif nav == "📋 View Records":
             risk = get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol'])
             with st.expander(f"#{p['id']} · {p['full_name']} · {risk}"):
                 c1, c2, c3 = st.columns(3)
-                c1.markdown(f"**📧 Email:** {p['email']}")
-                c1.markdown(f"**🎂 DOB:** {p['date_of_birth']}")
-                c2.markdown(f"**🩸 Glucose:** {p['glucose']} mg/dL")
-                c2.markdown(f"**💉 Haemoglobin:** {p['haemoglobin']} g/dL")
-                c3.markdown(f"**🫀 Cholesterol:** {p['cholesterol']} mg/dL")
-                c3.markdown(f"**📅 Added:** {p['created_at'][:10]}")
+                c1.markdown(f"**Email:** {p['email']}")
+                c1.markdown(f"**DOB:** {p['date_of_birth']}")
+                c2.markdown(f"**Glucose:** {p['glucose']} mg/dL")
+                c2.markdown(f"**Haemoglobin:** {p['haemoglobin']} g/dL")
+                c3.markdown(f"**Cholesterol:** {p['cholesterol']} mg/dL")
+                c3.markdown(f"**Added:** {p['created_at'][:10]}")
                 if p.get('remarks'):
                     st.markdown(f"""<div class='remarks-box' style='margin-top:10px;'>
-                        <strong style='color:#0ea5e9;'>🤖 AI Remarks:</strong><br>{p['remarks'].replace('**','').replace('*','').replace('??','').strip()}</div>""",
+                        <strong style='color:#0ea5e9;'>AI Remarks:</strong><br>{p['remarks'].replace('**','').replace('*','').replace('??','').strip()}</div>""",
                         unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════════
-# ✏️ UPDATE RECORD
-# ════════════════════════════════════════════════════════════════════════════════
-elif nav == "✏️ Update Record":
-    st.markdown("<div class='section-title'>✏️ Update Patient Record</div>", unsafe_allow_html=True)
+elif nav == "Update Record":
+    st.markdown("<div class='section-title'>Update Patient Record</div>", unsafe_allow_html=True)
 
     patients = read_all_patients()
     if not patients:
@@ -548,11 +526,11 @@ elif nav == "✏️ Update Record":
                     haemoglobin = st.number_input("Haemoglobin (g/dL) *", value=float(patient['haemoglobin']), min_value=0.0, max_value=25.0, step=0.1)
                     cholesterol = st.number_input("Cholesterol (mg/dL) *", value=float(patient['cholesterol']), min_value=0.0, max_value=700.0, step=0.1)
 
-                regen_ai = st.checkbox("🤖 Re-run AI Analysis", value=True, help="Regenerate AI health prediction with updated values")
+                regen_ai = st.checkbox("Re-run AI Analysis", value=True, help="Regenerate AI health prediction with updated values")
 
                 col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
                 with col_btn2:
-                    update_btn = st.form_submit_button("💾 Update Patient", use_container_width=True)
+                    update_btn = st.form_submit_button("Update Patient", use_container_width=True)
 
             if update_btn:
                 errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
@@ -562,7 +540,7 @@ elif nav == "✏️ Update Record":
                 else:
                     remarks = patient.get('remarks', '')
                     if regen_ai:
-                        with st.spinner("🤖 Re-analyzing with updated data..."):
+                        with st.spinner("Re-analyzing with updated data..."):
                             try:
                                 remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
                             except Exception as ex:
@@ -579,11 +557,8 @@ elif nav == "✏️ Update Record":
                     else:
                         st.error("❌ Update failed. Email may already exist for another patient.")
 
-# ════════════════════════════════════════════════════════════════════════════════
-# 🗑️ DELETE RECORD
-# ════════════════════════════════════════════════════════════════════════════════
-elif nav == "🗑️ Delete Record":
-    st.markdown("<div class='section-title'>🗑️ Delete Patient Record</div>", unsafe_allow_html=True)
+elif nav == "Delete Record":
+    st.markdown("<div class='section-title'>Delete Patient Record</div>", unsafe_allow_html=True)
 
     patients = read_all_patients()
     if not patients:
@@ -600,20 +575,20 @@ elif nav == "🗑️ Delete Record":
             <div class='mira-card' style='border-color:#ef444444;'>
                 <div style='font-size:1rem; font-weight:600; color:#f1f5f9; margin-bottom:12px;'>Patient Details</div>
                 <table style='width:100%; font-size:0.88rem; color:#94a3b8;'>
-                    <tr><td style='padding:4px 0; width:50%;'>📋 <strong>Name:</strong> {patient['full_name']}</td>
-                        <td>📧 <strong>Email:</strong> {patient['email']}</td></tr>
-                    <tr><td>🎂 <strong>DOB:</strong> {patient['date_of_birth']}</td>
-                        <td>🎯 <strong>Risk:</strong> {risk}</td></tr>
-                    <tr><td>🩸 <strong>Glucose:</strong> {patient['glucose']} mg/dL</td>
-                        <td>💉 <strong>Haemoglobin:</strong> {patient['haemoglobin']} g/dL</td></tr>
-                    <tr><td>🫀 <strong>Cholesterol:</strong> {patient['cholesterol']} mg/dL</td><td></td></tr>
+                    <tr><td style='padding:4px 0; width:50%;'><strong>Name:</strong> {patient['full_name']}</td>
+                        <td><strong>Email:</strong> {patient['email']}</td></tr>
+                    <tr><td><strong>DOB:</strong> {patient['date_of_birth']}</td>
+                        <td><strong>Risk:</strong> {risk}</td></tr>
+                    <tr><td><strong>Glucose:</strong> {patient['glucose']} mg/dL</td>
+                        <td><strong>Haemoglobin:</strong> {patient['haemoglobin']} g/dL</td></tr>
+                    <tr><td><strong>Cholesterol:</strong> {patient['cholesterol']} mg/dL</td><td></td></tr>
                 </table>
             </div>""", unsafe_allow_html=True)
 
             st.warning("⚠️ This action is permanent and cannot be undone.")
             col1, col2, col3 = st.columns([1, 1, 2])
             with col1:
-                if st.button("🗑️ Confirm Delete", type="primary"):
+                if st.button("Confirm Delete", type="primary"):
                     if delete_patient(pid):
                         st.success(f"✅ Patient #{pid} — **{patient['full_name']}** has been deleted.")
                         st.rerun()
