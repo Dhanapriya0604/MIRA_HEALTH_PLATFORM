@@ -7,7 +7,7 @@ from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
 
 st.set_page_config(
-    page_title="MIRA – Medical Intelligence",
+    page_title="MedInsight",
     page_icon="assets/favicon.ico",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -152,7 +152,7 @@ html, body, [class*="css"] {
     font-weight: 600;
     font-size: 0.72rem;
 }
-.mira-header {
+.medinsight-header {
     background: var(--bg-white);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -164,27 +164,27 @@ html, body, [class*="css"] {
     align-items: stretch;
     min-height: 100px;
 }
-.mira-header-stripe {
+.medinsight-header-stripe {
     width: 7px;
     background: linear-gradient(180deg, #1847c2 0%, #3b6ff0 50%, #0891b2 100%);
     flex-shrink: 0;
 }
-.mira-header-body {
+.medinsight-header-body {
     flex: 1;
     padding: 28px 36px;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-.mira-header-left {}
-.mira-header-title {
+.medinsight-header-left {}
+.medinsight-header-title {
     font-size: 1.85rem;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: 5px;
     line-height: 1;
 }
-.mira-header-sub {
+.medinsight-header-sub {
     font-size: 0.72rem;
     color: var(--text-muted);
     letter-spacing: 2.5px;
@@ -192,13 +192,13 @@ html, body, [class*="css"] {
     margin-top: 5px;
     font-weight: 400;
 }
-.mira-header-right {
+.medinsight-header-right {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 6px;
 }
-.mira-header-badge {
+.medinsight-header-badge {
     background: var(--primary-light);
     border: 1px solid var(--primary-mid);
     border-radius: 100px;
@@ -209,7 +209,7 @@ html, body, [class*="css"] {
     letter-spacing: 1.5px;
     text-transform: uppercase;
 }
-.mira-header-status {
+.medinsight-header-status {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -217,7 +217,7 @@ html, body, [class*="css"] {
     color: var(--success);
     font-weight: 500;
 }
-.mira-header-status-dot {
+.medinsight-header-status-dot {
     width: 7px; height: 7px;
     background: var(--success);
     border-radius: 50%;
@@ -371,7 +371,7 @@ html, body, [class*="css"] {
 .pill-high     { background: #fef2f2; color: #dc2626; }
 .pill-normal   { background: #ecfdf5; color: #059669; }
 .pill-low      { background: #fffbeb; color: #d97706; }
-.mira-card {
+.medinsight-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -380,7 +380,7 @@ html, body, [class*="css"] {
     box-shadow: var(--shadow-sm);
     transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
-.mira-card:hover {
+.medinsight-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
     border-color: var(--primary-mid);
@@ -509,7 +509,7 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
     margin-bottom: 6px;
 }
 .empty-sub { font-size: 0.83rem; color: var(--text-muted); }
-.mira-divider { height: 1px; background: var(--border); margin: 18px 0; }
+.medinsight-divider { height: 1px; background: var(--border); margin: 18px 0; }
 
 .delete-card {
     background: #fff9f9;
@@ -556,9 +556,9 @@ with st.sidebar:
     <div class='sidebar-logo'>
         <div class='sidebar-logo-mark'>
             <div class='sidebar-logo-icon'>+</div>
-            <div class='sidebar-logo-name'>MIRA</div>
+            <div class='sidebar-logo-name'>MedInsight</div>
         </div>
-        <div class='sidebar-logo-sub'>Medical Intelligence Platform</div>
+        <div class='sidebar-logo-sub'>Health Risk Assessment Platform</div>
     </div>
     <div class='nav-section-label'>Navigation</div>
     """, unsafe_allow_html=True)
@@ -568,17 +568,17 @@ with st.sidebar:
                    label_visibility="collapsed")
 
 st.markdown("""
-<div class='mira-header'>
-    <div class='mira-header-stripe'></div>
-    <div class='mira-header-body'>
-        <div class='mira-header-left'>
-            <div class='mira-header-title'>MIRA</div>
-            <div class='mira-header-sub'>Medical Intelligence &amp; Robotic Automation</div>
+<div class='medinsight-header'>
+    <div class='medinsight-header-stripe'></div>
+    <div class='medinsight-header-body'>
+        <div class='medinsight-header-left'>
+            <div class='medinsight-header-title'>MedInsight</div>
+            <div class='medinsight-header-sub'>AI-Powered Health Risk Assessment &amp; Patient Management</div>
         </div>
-        <div class='mira-header-right'>
-            <div class='mira-header-badge'>Health Prediction Platform</div>
-            <div class='mira-header-status'>
-                <div class='mira-header-status-dot'></div>
+        <div class='medinsight-header-right'>
+            <div class='medinsight-header-badge'>Health Prediction Platform</div>
+            <div class='medinsight-header-status'>
+                <div class='medinsight-header-status-dot'></div>
                 System Active
             </div>
         </div>
@@ -789,7 +789,7 @@ elif nav == "Add Patient":
             for e in errors:
                 st.error(e)
         else:
-            with st.spinner("MIRA AI is analyzing patient data..."):
+            with st.spinner("MedInsight AI is analyzing patient data..."):
                 try:
                     remarks    = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
                     patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
@@ -797,7 +797,7 @@ elif nav == "Add Patient":
                         risk = risk_pill(glucose, haemoglobin, cholesterol)
                         st.success(f"Patient {full_name} registered successfully.")
                         st.markdown(f"""
-                        <div class='mira-card'>
+                        <div class='medinsight-card'>
                             <div style='display:flex;justify-content:space-between;
                                         align-items:center;margin-bottom:14px;'>
                                 <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
@@ -875,7 +875,7 @@ elif nav == "View Records":
                 m3.markdown(f"**Added**\n\n{p['created_at'][:10]}")
                 m4.markdown(f"**Risk**")
                 m4.markdown(rp, unsafe_allow_html=True)
-                st.markdown("<div class='mira-divider'></div>", unsafe_allow_html=True)
+                st.markdown("<div class='medinsight-divider'></div>", unsafe_allow_html=True)
 
                 gc1, gc2, gc3 = st.columns(3)
                 with gc1:
@@ -948,7 +948,7 @@ elif nav == "Update Record":
                         st.success(f"Patient record updated successfully.")
                         if remarks:
                             st.markdown(f"""
-                            <div class='mira-card'>
+                            <div class='medinsight-card'>
                                 <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
                                             text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;'>
                                     Updated AI Remarks
