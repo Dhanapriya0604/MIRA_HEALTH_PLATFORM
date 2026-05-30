@@ -509,7 +509,6 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
     margin-bottom: 6px;
 }
 .empty-sub { font-size: 0.83rem; color: var(--text-muted); }
-
 .mira-divider { height: 1px; background: var(--border); margin: 18px 0; }
 
 .delete-card {
@@ -564,7 +563,7 @@ with st.sidebar:
     <div class='nav-section-label'>Navigation</div>
     """, unsafe_allow_html=True)
 
-    nav = st.radio("", ["Dashboard", "Add Patient", "View Records",
+    nav = st.radio("", ["Home", "Add Patient", "View Records",
                         "Update Record", "Delete Record"],
                    label_visibility="collapsed")
 
@@ -587,7 +586,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if nav == "Dashboard":
+if nav == "Home":
     patients  = read_all_patients()
     total     = len(patients)
     high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
@@ -607,7 +606,6 @@ if nav == "Dashboard":
             <div class='metric-number'>{val}</div>
             <div class='metric-title'>{label}</div>
         </div>""", unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
 
     if not patients:
@@ -620,7 +618,6 @@ if nav == "Dashboard":
         col_left, col_right = st.columns([3, 2])
         with col_left:
             st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
-            st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
             df = pd.DataFrame(patients)
             names = df['full_name'].tolist()
             G_MAX, C_MAX, H_MAX = 300.0, 300.0, 20.0
@@ -630,12 +627,10 @@ if nav == "Dashboard":
                 ("cholesterol", "Cholesterol", C_MAX, "mg/dL"),
                 ("haemoglobin", "Haemoglobin", H_MAX, "g/dL"),
             ]
-
             fig = go.Figure()
             for key, label, max_val, unit in params:
                 raw_vals = df[key].tolist()
                 pct_vals = [v / max_val * 100 for v in raw_vals]
-                # Per-patient color for this parameter
                 colors = [param_status(key, v)[1] for v in raw_vals]
 
                 fig.add_trace(go.Bar(
@@ -658,7 +653,7 @@ if nav == "Dashboard":
                     ),
                     customdata=raw_vals,
                     legendgroup=label,
-                    showlegend=False,  # we'll draw a custom legend below
+                    showlegend=False,  
                 ))
 
             fig.update_layout(
@@ -689,15 +684,11 @@ if nav == "Dashboard":
                     <span class='legend-pill'><span class='legend-dot' style='background:#dc2626'></span>High</span>
                 </div>
             </div>
-            <div style='font-size:0.68rem;color:#8a97aa;text-align:right;margin-top:6px;'>
-                Bar color = clinical status &nbsp;|&nbsp; Height = % of reference ceiling &nbsp;|&nbsp; Labels = actual value
-            </div>
             """, unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
         with col_right:
             st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
-            st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
             fig2 = go.Figure(data=[go.Pie(
                 labels=['Healthy', 'Moderate', 'High Risk'],
                 values=[healthy if healthy else 0.001,
@@ -778,7 +769,7 @@ elif nav == "Add Patient":
         col1, col2 = st.columns(2)
         with col1:
             full_name   = st.text_input("Full Name", placeholder="Enter your name")
-            email       = st.text_input("Email Address", placeholder="xxxx@gmail.com")
+            email       = st.text_input("Email Address", placeholder="xxxxxxx@gmail.com")
             glucose     = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
                                            value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
         with col2:
