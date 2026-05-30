@@ -2,7 +2,7 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = "mira_patients.db"
+DB_PATH = "medinsight_patients.db"
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
