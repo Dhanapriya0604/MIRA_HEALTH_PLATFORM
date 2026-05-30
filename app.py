@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date, datetime
-
 from database import init_db, create_patient, read_all_patients, read_patient_by_id, update_patient, delete_patient, search_patients
 from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
@@ -69,11 +68,13 @@ st.markdown("""
     --radius-sm:      8px;
     --radius-lg:      18px;
 }
+
 html, body, [class*="css"] {
     font-family: 'Sora', sans-serif;
     background-color: var(--bg);
     color: var(--text-primary);
 }
+
 [data-testid="stSidebar"] {
     background: var(--bg-white);
     border-right: 1px solid var(--border);
@@ -151,7 +152,6 @@ html, body, [class*="css"] {
     font-weight: 600;
     font-size: 0.72rem;
 }
-
 .mira-header {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -227,7 +227,6 @@ html, body, [class*="css"] {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.45; }
 }
-
 .section-title {
     font-size: 0.78rem;
     font-weight: 700;
@@ -248,7 +247,6 @@ html, body, [class*="css"] {
     border-radius: 2px;
     flex-shrink: 0;
 }
-
 .metric-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -295,7 +293,6 @@ html, body, [class*="css"] {
     color: var(--card-color, #1847c2);
     letter-spacing: -2px;
 }
-
 .chart-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -303,7 +300,6 @@ html, body, [class*="css"] {
     padding: 20px 20px 12px;
     box-shadow: var(--shadow-sm);
 }
-
 .legend-row {
     display: flex;
     gap: 14px;
@@ -325,7 +321,6 @@ html, body, [class*="css"] {
     border-radius: 3px;
     flex-shrink: 0;
 }
-
 .pt-table {
     width: 100%;
     border-collapse: collapse;
@@ -362,7 +357,6 @@ html, body, [class*="css"] {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.82rem;
 }
-
 .pill {
     display: inline-block;
     padding: 3px 10px;
@@ -377,7 +371,6 @@ html, body, [class*="css"] {
 .pill-high     { background: #fef2f2; color: #dc2626; }
 .pill-normal   { background: #ecfdf5; color: #059669; }
 .pill-low      { background: #fffbeb; color: #d97706; }
-
 .mira-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -392,7 +385,6 @@ html, body, [class*="css"] {
     box-shadow: var(--shadow-md);
     border-color: var(--primary-mid);
 }
-
 .remarks-box {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -411,7 +403,6 @@ html, body, [class*="css"] {
     letter-spacing: 1.5px;
     margin-bottom: 8px;
 }
-
 [data-testid="stExpander"] {
     background: var(--bg-white) !important;
     border: 1px solid var(--border) !important;
@@ -422,7 +413,6 @@ html, body, [class*="css"] {
     transition: box-shadow 0.2s;
 }
 [data-testid="stExpander"]:hover { box-shadow: var(--shadow-md); }
-
 .stButton > button {
     background: linear-gradient(135deg, #1847c2, #2558e0);
     color: #fff !important;
@@ -443,7 +433,6 @@ html, body, [class*="css"] {
     transform: translateY(-1px);
 }
 .stButton > button:active { transform: none; }
-
 .stTextInput > div > div input,
 .stNumberInput > div > div input,
 .stDateInput > div > div input,
@@ -485,9 +474,7 @@ div[data-testid="stDataFrame"] {
 }
 
 .stAlert { border-radius: var(--radius-sm) !important; }
-
 hr { border-color: var(--border); margin: 10px 0 18px; }
-
 [data-testid="stRadio"] label {
     font-size: 0.82rem !important;
     font-weight: 500 !important;
@@ -542,12 +529,14 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
 }
 .delete-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .delete-table td {
-    padding: 7px 0;
+    padding: 12px 16px;
     width: 50%;
     color: var(--text-secondary);
     border-bottom: 1px solid #fde8e8;
+    vertical-align: middle;
+    line-height: 1.6;
 }
-.delete-table td:last-child { border-bottom: none; }
+.delete-table tr:last-child td { border-bottom: none; }
 .delete-table td strong { color: var(--text-primary); font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
@@ -575,7 +564,7 @@ with st.sidebar:
     <div class='nav-section-label'>Navigation</div>
     """, unsafe_allow_html=True)
 
-    nav = st.radio("", ["Home", "Add Patient", "View Records",
+    nav = st.radio("", ["Dashboard", "Add Patient", "View Records",
                         "Update Record", "Delete Record"],
                    label_visibility="collapsed")
 
@@ -598,13 +587,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-if nav == "Home":
+if nav == "Dashboard":
     patients  = read_all_patients()
     total     = len(patients)
     high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     moderate  = sum(1 for p in patients if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     healthy   = sum(1 for p in patients if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
-
     c1, c2, c3, c4 = st.columns(4)
     kpis = [
         (total,     "Total Patients", "#1847c2", "T"),
@@ -633,10 +621,8 @@ if nav == "Home":
         with col_left:
             st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
             st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
-
             df = pd.DataFrame(patients)
             names = df['full_name'].tolist()
-
             G_MAX, C_MAX, H_MAX = 300.0, 300.0, 20.0
 
             params = [
@@ -649,6 +635,7 @@ if nav == "Home":
             for key, label, max_val, unit in params:
                 raw_vals = df[key].tolist()
                 pct_vals = [v / max_val * 100 for v in raw_vals]
+                # Per-patient color for this parameter
                 colors = [param_status(key, v)[1] for v in raw_vals]
 
                 fig.add_trace(go.Bar(
@@ -787,12 +774,11 @@ if nav == "Home":
 
 elif nav == "Add Patient":
     st.markdown("<div class='section-title'>Register New Patient</div>", unsafe_allow_html=True)
-
     with st.form("add_patient_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            full_name   = st.text_input("Full Name", placeholder="e.g., Dhanapriya D")
-            email       = st.text_input("Email Address", placeholder="e.g., patient@email.com")
+            full_name   = st.text_input("Full Name", placeholder="Enter your name")
+            email       = st.text_input("Email Address", placeholder="xxxx@gmail.com")
             glucose     = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
                                            value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
         with col2:
@@ -838,6 +824,7 @@ elif nav == "Add Patient":
 
 elif nav == "View Records":
     st.markdown("<div class='section-title'>Patient Records</div>", unsafe_allow_html=True)
+
     search_query = st.text_input("Search by name or email", placeholder="Type to search...")
     patients     = search_patients(search_query) if search_query else read_all_patients()
 
@@ -890,13 +877,13 @@ elif nav == "View Records":
             label_str = p['full_name'] + " — " + ("High Risk" if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else ("Moderate" if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else "Healthy"))
 
             with st.expander(p['full_name']):
+                # meta row
                 m1, m2, m3, m4 = st.columns(4)
                 m1.markdown(f"**Email**\n\n{p['email']}")
                 m2.markdown(f"**Date of Birth**\n\n{p['date_of_birth']}")
                 m3.markdown(f"**Added**\n\n{p['created_at'][:10]}")
                 m4.markdown(f"**Risk**")
                 m4.markdown(rp, unsafe_allow_html=True)
-
                 st.markdown("<div class='mira-divider'></div>", unsafe_allow_html=True)
 
                 gc1, gc2, gc3 = st.columns(3)
@@ -1028,7 +1015,7 @@ elif nav == "Delete Record":
             </div>""", unsafe_allow_html=True)
 
             st.warning("This action is permanent and cannot be undone.")
-            col1, col2, _ = st.columns([1, 1, 2])
+            col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button("Confirm Delete", type="primary"):
                     if delete_patient(pid):
