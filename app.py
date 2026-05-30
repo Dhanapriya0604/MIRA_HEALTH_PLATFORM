@@ -328,6 +328,7 @@ if nav == "🏠 Dashboard":
         st.markdown("<div class='section-title'>🕐 Recent Patients</div>", unsafe_allow_html=True)
         recent = patients[:5]
         df_display = pd.DataFrame(recent)[['full_name', 'email', 'glucose', 'haemoglobin', 'cholesterol', 'created_at']]
+        df_display['created_at'] = df_display['created_at'].apply(lambda x: x[:10])
         df_display.columns = ['Name', 'Email', 'Glucose', 'Haemoglobin', 'Cholesterol', 'Added On']
         df_display['Risk'] = [get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) for p in recent]
         st.dataframe(df_display, use_container_width=True, hide_index=True)
@@ -378,14 +379,16 @@ elif nav == "➕ Add Patient":
 
                     if patient_id:
                         risk = get_risk_level(glucose, haemoglobin, cholesterol)
-                        st.success(f"✅ Patient **{full_name}** registered successfully! ID: #{patient_id}")
+                        # Clean markdown characters from AI response
+                        clean_remarks = remarks.replace("**", "").replace("*", "").replace("??", "").replace("##", "").strip()
+                        st.success(f"✅ Patient {full_name} registered successfully! ID: #{patient_id}")
                         st.markdown(f"""
                         <div class='mira-card'>
                             <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;'>
                                 <div style='font-size:1rem; font-weight:600; color:#0ea5e9;'>🤖 AI Health Assessment</div>
-                                <div style='font-size:0.9rem;'>{risk}</div>
+                                <div style='font-size:0.95rem; font-weight:600;'>{risk}</div>
                             </div>
-                            <div class='remarks-box'>{remarks}</div>
+                            <div class='remarks-box'>{clean_remarks}</div>
                         </div>""", unsafe_allow_html=True)
                     else:
                         st.error("❌ A patient with this email already exists.")
@@ -418,7 +421,7 @@ elif nav == "📋 View Records":
                 c3.markdown(f"**📅 Added:** {p['created_at'][:10]}")
                 if p.get('remarks'):
                     st.markdown(f"""<div class='remarks-box' style='margin-top:10px;'>
-                        <strong style='color:#0ea5e9;'>🤖 AI Remarks:</strong><br>{p['remarks']}</div>""",
+                        <strong style='color:#0ea5e9;'>🤖 AI Remarks:</strong><br>{p['remarks'].replace('**','').replace('*','').replace('??','').strip()}</div>""",
                         unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════════
