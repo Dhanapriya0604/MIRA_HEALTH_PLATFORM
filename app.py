@@ -609,22 +609,7 @@ with st.sidebar:
                         "Update Record", "Delete Record"],
                    label_visibility="collapsed")
 
-    st.markdown("""
-    <div class='sidebar-meta'>
-        <div class='sidebar-meta-row'>
-            <span class='sidebar-meta-label'>AI Engine</span>
-            <span class='sidebar-meta-val'>Claude (Anthropic)</span>
-        </div>
-        <div class='sidebar-meta-row'>
-            <span class='sidebar-meta-label'>Storage</span>
-            <span class='sidebar-meta-val'>SQLite</span>
-        </div>
-        <div class='sidebar-meta-row'>
-            <span class='sidebar-meta-label'>Version</span>
-            <span class='sidebar-meta-val'>2.0</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+
 
 # ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -881,19 +866,14 @@ elif nav == "Add Patient":
                     patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
                     if patient_id:
                         risk = risk_pill(glucose, haemoglobin, cholesterol)
-                        st.success(f"Patient {full_name} registered — ID #{patient_id}")
+                        st.success(f"Patient {full_name} registered successfully.")
                         st.markdown(f"""
                         <div class='mira-card'>
                             <div style='display:flex;justify-content:space-between;
                                         align-items:center;margin-bottom:14px;'>
-                                <div>
-                                    <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
-                                                text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;'>
-                                        AI Health Assessment
-                                    </div>
-                                    <div style='font-weight:600;color:#0c1629;font-size:1rem;'>
-                                        {full_name}
-                                    </div>
+                                <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
+                                            text-transform:uppercase;letter-spacing:1.5px;'>
+                                    AI Health Assessment
                                 </div>
                                 {risk}
                             </div>
@@ -961,7 +941,7 @@ elif nav == "View Records":
             rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
             label_str = p['full_name'] + " — " + ("High Risk" if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else ("Moderate" if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else "Healthy"))
 
-            with st.expander(f"#{p['id']}  —  {p['full_name']}"):
+            with st.expander(p['full_name']):
                 # meta row
                 m1, m2, m3, m4 = st.columns(4)
                 m1.markdown(f"**Email**\n\n{p['email']}")
@@ -1003,7 +983,7 @@ elif nav == "Update Record":
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"#{p['id']} — {p['full_name']} ({p['email']})": p['id'] for p in patients}
+        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
         selected = st.selectbox("Select patient to update", list(options.keys()))
         pid      = options[selected]
         patient  = read_patient_by_id(pid)
@@ -1043,7 +1023,7 @@ elif nav == "Update Record":
                     success = update_patient(pid, full_name, str(dob), email,
                                              glucose, haemoglobin, cholesterol, remarks)
                     if success:
-                        st.success(f"Patient #{pid} updated successfully.")
+                        st.success(f"Patient record updated successfully.")
                         if remarks:
                             st.markdown(f"""
                             <div class='mira-card'>
@@ -1066,7 +1046,7 @@ elif nav == "Delete Record":
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"#{p['id']} — {p['full_name']} ({p['email']})": p['id'] for p in patients}
+        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
         selected = st.selectbox("Select patient to delete", list(options.keys()))
         pid      = options[selected]
         patient  = read_patient_by_id(pid)
@@ -1111,7 +1091,7 @@ elif nav == "Delete Record":
             with col1:
                 if st.button("Confirm Delete", type="primary"):
                     if delete_patient(pid):
-                        st.success(f"Patient #{pid} — {patient['full_name']} deleted.")
+                        st.success(f"{patient['full_name']} has been deleted.")
                         st.rerun()
                     else:
                         st.error("Deletion failed.")
