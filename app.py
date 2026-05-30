@@ -1,1019 +1,412 @@
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
 from datetime import date, datetime
 from database import init_db, create_patient, read_all_patients, read_patient_by_id, update_patient, delete_patient, search_patients
 from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
 
+# ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="MedInsight",
-    page_icon="assets/favicon.ico",
+    page_title="MIRA — Medical Intelligence",
+    page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
+
 init_db()
-THRESHOLDS = {
-    "glucose":     {"low": 70,   "high": 99,   "max": 300,  "unit": "mg/dL"},
-    "haemoglobin": {"low": 12.0, "high": 17.5, "max": 20.0, "unit": "g/dL"},
-    "cholesterol": {"low": 0,    "high": 200,  "max": 300,  "unit": "mg/dL"},
-}
 
-def param_status(key, value):
-    t = THRESHOLDS[key]
-    if value < t["low"]:
-        return "Low",    "#d97706", "#fffbeb"
-    elif value <= t["high"]:
-        return "Normal", "#059669", "#ecfdf5"
-    else:
-        return "High",   "#dc2626", "#fef2f2"
-
-def bar_color_for_patient(p):
-    out = {}
-    for key in ("glucose", "haemoglobin", "cholesterol"):
-        _, color, _ = param_status(key, p[key])
-        out[key] = color
-    return out
-
+# ── Custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 :root {
-    --primary:        #1847c2;
-    --primary-light:  #eef2fd;
-    --primary-mid:    #c0cef8;
-    --success:        #059669;
-    --success-light:  #ecfdf5;
-    --warning:        #d97706;
-    --warning-light:  #fffbeb;
-    --danger:         #dc2626;
-    --danger-light:   #fef2f2;
-    --normal-bar:     #059669;
-    --low-bar:        #d97706;
-    --high-bar:       #dc2626;
-    --bg:             #f0f4f8;
-    --bg-white:       #ffffff;
-    --surface:        #f7f9fc;
-    --border:         #dde3ed;
-    --border-strong:  #c4cdd9;
-    --text-primary:   #0c1629;
-    --text-secondary: #4a5568;
-    --text-muted:     #8a97aa;
-    --shadow-sm:      0 1px 4px rgba(12,22,41,0.07);
-    --shadow-md:      0 4px 18px rgba(12,22,41,0.10);
-    --shadow-lg:      0 10px 40px rgba(12,22,41,0.13);
-    --glow:           0 0 0 3px rgba(24,71,194,0.13);
-    --radius:         12px;
-    --radius-sm:      8px;
-    --radius-lg:      18px;
+    --bg:        #0a0e1a;
+    --surface:   #111827;
+    --border:    #1e2d40;
+    --accent:    #00d4aa;
+    --accent2:   #3b82f6;
+    --warn:      #f59e0b;
+    --danger:    #ef4444;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
 }
 
 html, body, [class*="css"] {
-    font-family: 'Sora', sans-serif;
+    font-family: 'DM Sans', sans-serif;
     background-color: var(--bg);
-    color: var(--text-primary);
+    color: var(--text);
 }
 
-[data-testid="stSidebar"] {
-    background: var(--bg-white);
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: var(--surface);
     border-right: 1px solid var(--border);
-    box-shadow: 3px 0 16px rgba(12,22,41,0.06);
-}
-[data-testid="stSidebar"] * { color: var(--text-primary) !important; }
-
-.sidebar-logo {
-    padding: 28px 20px 14px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 18px;
-}
-.sidebar-logo-mark {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 4px;
-}
-.sidebar-logo-icon {
-    width: 36px; height: 36px;
-    background: linear-gradient(135deg, #1847c2, #3b6ff0);
-    border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1rem;
-    box-shadow: 0 2px 8px rgba(24,71,194,0.25);
-}
-.sidebar-logo-name {
-    font-family: 'Sora', sans-serif;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--text-primary) !important;
-    letter-spacing: 3px;
-}
-.sidebar-logo-sub {
-    font-size: 0.62rem;
-    color: var(--text-muted) !important;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    padding-left: 46px;
 }
 
-.nav-section-label {
-    font-size: 0.6rem;
-    font-weight: 700;
-    color: var(--text-muted) !important;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    padding: 0 14px 6px;
+/* Metric cards */
+[data-testid="metric-container"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
 }
 
-.sidebar-meta {
-    margin: 16px 0 0;
-    border-top: 1px solid var(--border);
-    padding: 16px 14px 0;
-}
-.sidebar-meta-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 6px 0;
-    font-size: 0.73rem;
-    color: var(--text-secondary) !important;
-    border-bottom: 1px solid var(--border);
-}
-.sidebar-meta-row:last-child { border-bottom: none; }
-.sidebar-meta-label {
-    font-weight: 600;
-    color: var(--text-muted) !important;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-}
-.sidebar-meta-val {
-    color: var(--primary) !important;
-    font-weight: 600;
-    font-size: 0.72rem;
-}
-.medinsight-header {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 0;
-    margin-bottom: 28px;
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-    display: flex;
-    align-items: stretch;
-    min-height: 100px;
-}
-.medinsight-header-stripe {
-    width: 7px;
-    background: linear-gradient(180deg, #1847c2 0%, #3b6ff0 50%, #0891b2 100%);
-    flex-shrink: 0;
-}
-.medinsight-header-body {
-    flex: 1;
-    padding: 28px 36px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.medinsight-header-left {}
-.medinsight-header-title {
-    font-size: 1.85rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 5px;
-    line-height: 1;
-}
-.medinsight-header-sub {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    margin-top: 5px;
-    font-weight: 400;
-}
-.medinsight-header-right {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 6px;
-}
-.medinsight-header-badge {
-    background: var(--primary-light);
-    border: 1px solid var(--primary-mid);
-    border-radius: 100px;
-    padding: 5px 14px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--primary);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-}
-.medinsight-header-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.72rem;
-    color: var(--success);
-    font-weight: 500;
-}
-.medinsight-header-status-dot {
-    width: 7px; height: 7px;
-    background: var(--success);
-    border-radius: 50%;
-    animation: pulse 2s infinite;
-}
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.45; }
-}
-.section-title {
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.section-title::before {
-    content: '';
-    width: 3px; height: 14px;
-    background: linear-gradient(180deg, var(--primary), #3b6ff0);
-    border-radius: 2px;
-    flex-shrink: 0;
-}
-.metric-card {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 22px 20px 18px;
-    box-shadow: var(--shadow-sm);
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.metric-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: var(--card-color, #1847c2);
-}
-.metric-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
-.metric-number {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 2.2rem;
-    font-weight: 500;
-    color: var(--card-color, #1847c2);
-    line-height: 1;
-    margin-bottom: 6px;
-}
-.metric-title {
-    font-size: 0.68rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-}
-.metric-bg-icon {
-    position: absolute;
-    right: 14px; top: 12px;
-    font-size: 2.2rem;
-    opacity: 0.06;
-    font-family: 'IBM Plex Mono', monospace;
-    font-weight: 700;
-    color: var(--card-color, #1847c2);
-    letter-spacing: -2px;
-}
-.chart-card {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 20px 12px;
-    box-shadow: var(--shadow-sm);
-}
-.legend-row {
-    display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-    justify-content: center;
-}
-.legend-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.5px;
-}
-.legend-dot {
-    width: 9px; height: 9px;
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-.pt-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.83rem;
-}
-.pt-table thead th {
-    background: var(--surface);
-    border-bottom: 2px solid var(--border);
-    padding: 10px 14px;
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    text-align: left;
-}
-.pt-table tbody tr {
-    border-bottom: 1px solid var(--border);
-    transition: background 0.15s;
-}
-.pt-table tbody tr:hover {
-    background: var(--surface);
-}
-.pt-table tbody td {
-    padding: 11px 14px;
-    color: var(--text-secondary);
-    vertical-align: middle;
-}
-.pt-table tbody td.name-cell {
-    font-weight: 600;
-    color: var(--text-primary);
-}
-.val-cell {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.82rem;
-}
-.pill {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 100px;
-    font-size: 0.67rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-.pill-healthy  { background: #ecfdf5; color: #059669; }
-.pill-moderate { background: #fffbeb; color: #d97706; }
-.pill-high     { background: #fef2f2; color: #dc2626; }
-.pill-normal   { background: #ecfdf5; color: #059669; }
-.pill-low      { background: #fffbeb; color: #d97706; }
-.medinsight-card {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 16px;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-}
-.medinsight-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--primary-mid);
-}
-.remarks-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--primary);
-    border-radius: var(--radius-sm);
-    padding: 16px 20px;
-    font-size: 0.86rem;
-    color: var(--text-secondary);
-    line-height: 1.78;
-}
-.remarks-label {
-    font-size: 0.62rem;
-    font-weight: 700;
-    color: var(--primary);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 8px;
-}
-[data-testid="stExpander"] {
-    background: var(--bg-white) !important;
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    overflow: hidden;
-    margin-bottom: 8px;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow 0.2s;
-}
-[data-testid="stExpander"]:hover { box-shadow: var(--shadow-md); }
+/* Buttons */
 .stButton > button {
-    background: linear-gradient(135deg, #1847c2, #2558e0);
-    color: #fff !important;
+    background: var(--accent);
+    color: #0a0e1a;
     border: none;
-    border-radius: var(--radius-sm);
-    padding: 10px 28px;
-    font-weight: 600;
-    font-size: 0.86rem;
-    letter-spacing: 0.3px;
-    transition: all 0.2s;
-    width: 100%;
-    box-shadow: 0 2px 10px rgba(24,71,194,0.28);
-    font-family: 'Sora', sans-serif;
-}
-.stButton > button:hover {
-    background: linear-gradient(135deg, #133ba3, #1847c2);
-    box-shadow: 0 6px 20px rgba(24,71,194,0.38);
-    transform: translateY(-1px);
-}
-.stButton > button:active { transform: none; }
-.stTextInput > div > div input,
-.stNumberInput > div > div input,
-.stDateInput > div > div input,
-.stTextArea > div > div textarea {
-    background: var(--bg-white) !important;
-    border: 1px solid var(--border-strong) !important;
-    border-radius: var(--radius-sm) !important;
-    color: var(--text-primary) !important;
-    font-family: 'Sora', sans-serif !important;
-    font-size: 0.88rem !important;
-    transition: border-color 0.18s, box-shadow 0.18s;
-}
-.stTextInput > div > div input:focus,
-.stNumberInput > div > div input:focus,
-.stDateInput > div > div input:focus,
-.stTextArea > div > div textarea:focus {
-    border-color: var(--primary) !important;
-    box-shadow: var(--glow) !important;
-}
-.stSelectbox > div > div {
-    background: var(--bg-white) !important;
-    border: 1px solid var(--border-strong) !important;
-    border-radius: var(--radius-sm) !important;
-}
-label, .stTextInput label, .stNumberInput label,
-.stDateInput label, .stTextArea label, .stSelectbox label {
-    font-size: 0.74rem !important;
-    font-weight: 700 !important;
-    color: var(--text-secondary) !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.8px !important;
-}
-
-div[data-testid="stDataFrame"] {
-    border-radius: var(--radius);
-    overflow: hidden;
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-sm);
-}
-
-.stAlert { border-radius: var(--radius-sm) !important; }
-hr { border-color: var(--border); margin: 10px 0 18px; }
-[data-testid="stRadio"] label {
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    text-transform: none !important;
-    letter-spacing: 0 !important;
-    color: var(--text-secondary) !important;
-    padding: 7px 10px;
-    border-radius: 7px;
-    transition: background 0.15s;
-}
-[data-testid="stRadio"] label:hover { background: var(--surface); }
-
-.stCheckbox label {
-    text-transform: none !important;
-    letter-spacing: 0 !important;
-    font-size: 0.86rem !important;
-    color: var(--text-primary) !important;
-    font-weight: 400 !important;
-}
-
-.empty-state {
-    background: var(--bg-white);
-    border: 2px dashed var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 60px 40px;
-    text-align: center;
-}
-.empty-title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 6px;
-}
-.empty-sub { font-size: 0.83rem; color: var(--text-muted); }
-.medinsight-divider { height: 1px; background: var(--border); margin: 18px 0; }
-
-.delete-card {
-    background: #fff9f9;
-    border: 1px solid #fecaca;
-    border-radius: var(--radius);
-    padding: 24px;
-    box-shadow: var(--shadow-sm);
-}
-.delete-card-title {
-    font-size: 0.7rem;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
     font-weight: 700;
-    color: var(--danger);
+    letter-spacing: 0.05em;
+    padding: 0.5rem 1.2rem;
+    transition: opacity 0.2s;
+}
+.stButton > button:hover { opacity: 0.85; }
+
+/* Inputs */
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input,
+.stDateInput > div > div > input,
+.stTextArea textarea {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    border-radius: 8px !important;
+}
+
+/* Section header */
+.section-header {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: var(--accent);
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 14px;
+    margin-bottom: 0.25rem;
 }
-.delete-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.delete-table td {
-    padding: 12px 16px;
-    width: 50%;
-    color: var(--text-secondary);
-    border-bottom: 1px solid #fde8e8;
-    vertical-align: middle;
-    line-height: 1.6;
+
+/* Risk badges */
+.badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
 }
-.delete-table tr:last-child td { border-bottom: none; }
-.delete-table td strong { color: var(--text-primary); font-weight: 600; }
+.badge-green  { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+.badge-yellow { background: #1c1400; color: #facc15; border: 1px solid #854d0e; }
+.badge-red    { background: #1c0a0a; color: #f87171; border: 1px solid #991b1b; }
+
+/* Cards */
+.patient-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.2s;
+}
+.patient-card:hover { border-color: var(--accent); }
+
+/* Logo */
+.logo-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+}
+.logo-sub {
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+
+/* Divider */
+hr { border-color: var(--border); }
+
+/* Success / error */
+.stSuccess { background: #052e16 !important; color: #4ade80 !important; }
+.stError   { background: #1c0a0a !important; color: #f87171 !important; }
+
+/* Dataframe */
+[data-testid="stDataFrame"] { border: 1px solid var(--border); border-radius: 8px; }
+
+/* Selectbox */
+.stSelectbox > div > div {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--text) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-def risk_pill(g, h, c):
-    raw = get_risk_level(g, h, c)
-    if "🔴" in raw:
-        return "<span class='pill pill-high'>High Risk</span>"
-    elif "🟡" in raw:
-        return "<span class='pill pill-moderate'>Moderate</span>"
-    return "<span class='pill pill-healthy'>Healthy</span>"
 
-def clean_md(text):
-    return text.replace("**","").replace("*","").replace("??","").replace("##","").strip()
-
+# ── Sidebar Navigation ────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
-    <div class='sidebar-logo'>
-        <div class='sidebar-logo-mark'>
-            <div class='sidebar-logo-icon'>+</div>
-            <div class='sidebar-logo-name'>MedInsight</div>
-        </div>
-        <div class='sidebar-logo-sub'>Health Risk Assessment Platform</div>
-    </div>
-    <div class='nav-section-label'>Navigation</div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="logo-text">🏥 MIRA</div>', unsafe_allow_html=True)
+    st.markdown('<div class="logo-sub">Medical Intelligence Robotic Automation</div>', unsafe_allow_html=True)
+    st.markdown("---")
 
-    nav = st.radio("", ["Home", "Add Patient", "View Records",
-                        "Update Record", "Delete Record"],
-                   label_visibility="collapsed")
+    page = st.radio(
+        "Navigation",
+        ["📊 Dashboard", "➕ Add Patient", "📋 View Records", "✏️ Edit Patient", "🗑️ Delete Patient"],
+        label_visibility="collapsed",
+    )
 
-st.markdown("""
-<div class='medinsight-header'>
-    <div class='medinsight-header-stripe'></div>
-    <div class='medinsight-header-body'>
-        <div class='medinsight-header-left'>
-            <div class='medinsight-header-title'>MedInsight</div>
-            <div class='medinsight-header-sub'>AI-Powered Health Risk Assessment &amp; Patient Management</div>
-        </div>
-        <div class='medinsight-header-right'>
-            <div class='medinsight-header-badge'>Health Prediction Platform</div>
-            <div class='medinsight-header-status'>
-                <div class='medinsight-header-status-dot'></div>
-                System Active
-            </div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("---")
+    patients = read_all_patients()
+    st.markdown(f'<p class="section-header">System Stats</p>', unsafe_allow_html=True)
+    st.markdown(f"**{len(patients)}** total patients")
 
-if nav == "Home":
-    patients  = read_all_patients()
-    total     = len(patients)
-    high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
-    moderate  = sum(1 for p in patients if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
-    healthy   = sum(1 for p in patients if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
-    c1, c2, c3, c4 = st.columns(4)
-    kpis = [
-        (total,     "Total Patients", "#1847c2", "T"),
-        (healthy,   "Healthy",        "#059669", "H"),
-        (moderate,  "Moderate Risk",  "#d97706", "M"),
-        (high_risk, "High Risk",      "#dc2626", "!"),
-    ]
-    for col, (val, label, color, icon) in zip([c1, c2, c3, c4], kpis):
-        col.markdown(f"""
-        <div class='metric-card' style='--card-color:{color};'>
-            <div class='metric-bg-icon'>{icon}</div>
-            <div class='metric-number'>{val}</div>
-            <div class='metric-title'>{label}</div>
-        </div>""", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
+    risks = [get_risk_level(p["glucose"], p["haemoglobin"], p["cholesterol"]) for p in patients]
+    high   = sum(1 for r in risks if "High" in r)
+    mod    = sum(1 for r in risks if "Moderate" in r)
+    healthy = sum(1 for r in risks if "Healthy" in r)
+    st.markdown(f"🔴 High Risk: **{high}** &nbsp; 🟡 Moderate: **{mod}** &nbsp; 🟢 Healthy: **{healthy}**", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown('<p class="logo-sub">v1.0.0 · Groq + Llama 3.3</p>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "📊 Dashboard":
+    st.markdown("## 📊 Dashboard")
+    st.markdown("Real-time overview of patient health analytics.")
+    st.markdown("---")
+
+    patients = read_all_patients()
 
     if not patients:
-        st.markdown("""
-        <div class='empty-state'>
-            <div class='empty-title'>No patient records yet</div>
-            <div class='empty-sub'>Use "Add Patient" to register your first patient.</div>
-        </div>""", unsafe_allow_html=True)
+        st.info("No patient records yet. Add your first patient using **➕ Add Patient**.")
     else:
-        col_left, col_right = st.columns([3, 2])
+        df = pd.DataFrame(patients)
+
+        # KPI Row
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Patients", len(df))
+        c2.metric("Avg Glucose", f"{df['glucose'].mean():.1f} mg/dL")
+        c3.metric("Avg Haemoglobin", f"{df['haemoglobin'].mean():.1f} g/dL")
+        c4.metric("Avg Cholesterol", f"{df['cholesterol'].mean():.1f} mg/dL")
+
+        st.markdown("---")
+
+        col_left, col_right = st.columns(2)
+
+        # Line chart — blood values per patient
         with col_left:
-            st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
-            df = pd.DataFrame(patients)
-            names = df['full_name'].tolist()
-            G_MAX, C_MAX, H_MAX = 300.0, 300.0, 20.0
-
-            params = [
-                ("glucose",     "Glucose",     G_MAX, "mg/dL"),
-                ("cholesterol", "Cholesterol", C_MAX, "mg/dL"),
-                ("haemoglobin", "Haemoglobin", H_MAX, "g/dL"),
-            ]
-            fig = go.Figure()
-            for key, label, max_val, unit in params:
-                raw_vals = df[key].tolist()
-                pct_vals = [v / max_val * 100 for v in raw_vals]
-                colors = [param_status(key, v)[1] for v in raw_vals]
-
-                fig.add_trace(go.Bar(
-                    name=label,
-                    x=names,
-                    y=pct_vals,
-                    text=[f"{v} {unit}" for v in raw_vals],
-                    textposition='outside',
-                    textfont=dict(size=9.5, color='#4a5568', family='IBM Plex Mono'),
-                    marker=dict(
-                        color=colors,
-                        opacity=0.90,
-                        line=dict(color='white', width=1.5),
-                        cornerradius=4,
-                    ),
-                    hovertemplate=(
-                        f"<b>%{{x}}</b><br>"
-                        f"{label}: <b>%{{customdata}} {unit}</b><br>"
-                        f"% of range: %{{y:.1f}}%<extra></extra>"
-                    ),
-                    customdata=raw_vals,
-                    legendgroup=label,
-                    showlegend=False,  
-                ))
-
-            fig.update_layout(
-                barmode='group',
-                paper_bgcolor='white', plot_bgcolor='white',
-                font=dict(color='#4a5568', family='Sora', size=11),
-                xaxis=dict(showgrid=False, linecolor='#dde3ed',
-                           tickfont=dict(size=11, color='#0c1629')),
-                yaxis=dict(showgrid=False, showticklabels=False, range=[0, 135]),
-                bargap=0.22, bargroupgap=0.06,
-                margin=dict(l=0, r=0, t=12, b=0),
-                height=310,
-                legend=dict(visible=False),
+            st.markdown('<p class="section-header">Blood Parameter Trends</p>', unsafe_allow_html=True)
+            fig_line = go.Figure()
+            names = df["full_name"].str.split().str[0]  # first names
+            fig_line.add_trace(go.Scatter(x=names, y=df["glucose"],      mode="lines+markers", name="Glucose",      line=dict(color="#00d4aa", width=2)))
+            fig_line.add_trace(go.Scatter(x=names, y=df["haemoglobin"],  mode="lines+markers", name="Haemoglobin",  line=dict(color="#3b82f6", width=2)))
+            fig_line.add_trace(go.Scatter(x=names, y=df["cholesterol"],  mode="lines+markers", name="Cholesterol",  line=dict(color="#f59e0b", width=2)))
+            fig_line.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#e2e8f0", size=11),
+                legend=dict(bgcolor="rgba(0,0,0,0)"),
+                xaxis=dict(gridcolor="#1e2d40"), yaxis=dict(gridcolor="#1e2d40"),
+                margin=dict(l=10, r=10, t=10, b=10), height=300,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig_line, use_container_width=True)
 
-            st.markdown("""
-            <div style='display:flex;justify-content:space-between;align-items:center;
-                        padding:0 4px;margin-top:-6px;'>
-                <div class='legend-row'>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#1847c2'></span>Glucose</span>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Cholesterol</span>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#0891b2'></span>Haemoglobin</span>
-                </div>
-                <div class='legend-row'>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#059669'></span>Normal</span>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Low</span>
-                    <span class='legend-pill'><span class='legend-dot' style='background:#dc2626'></span>High</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
+        # Donut — risk distribution
         with col_right:
-            st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
-            fig2 = go.Figure(data=[go.Pie(
-                labels=['Healthy', 'Moderate', 'High Risk'],
-                values=[healthy if healthy else 0.001,
-                        moderate if moderate else 0.001,
-                        high_risk if high_risk else 0.001],
-                hole=0.65,
-                marker=dict(
-                    colors=['#059669', '#d97706', '#dc2626'],
-                    line=dict(color='white', width=3)
-                ),
-                textfont=dict(size=11, family='Sora'),
-                textinfo='percent',
-                hovertemplate='<b>%{label}</b><br>%{value} patients<extra></extra>',
-            )])
-            fig2.update_layout(
-                paper_bgcolor='white', plot_bgcolor='white',
-                font=dict(color='#4a5568', family='Sora'),
-                legend=dict(
-                    orientation='v',
-                    bgcolor='white',
-                    font=dict(size=11),
-                    x=0.75, y=0.5,
-                    xanchor='left', yanchor='middle'
-                ),
-                margin=dict(l=0, r=60, t=10, b=10),
-                height=265,
-                annotations=[dict(
-                    text=f'<b>{total}</b><br><span style="font-size:10px">patients</span>',
-                    x=0.37, y=0.5,
-                    font=dict(size=18, color='#0c1629', family='IBM Plex Mono'),
-                    showarrow=False
-                )]
+            st.markdown('<p class="section-header">Risk Distribution</p>', unsafe_allow_html=True)
+            risk_labels = [get_risk_level(p["glucose"], p["haemoglobin"], p["cholesterol"]) for p in patients]
+            risk_counts = pd.Series(risk_labels).value_counts()
+            fig_donut = go.Figure(go.Pie(
+                labels=risk_counts.index,
+                values=risk_counts.values,
+                hole=0.6,
+                marker_colors=["#00d4aa", "#f59e0b", "#ef4444"],
+            ))
+            fig_donut.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#e2e8f0", size=11),
+                legend=dict(bgcolor="rgba(0,0,0,0)"),
+                margin=dict(l=10, r=10, t=10, b=10), height=300,
+                showlegend=True,
             )
-            st.plotly_chart(fig2, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.plotly_chart(fig_donut, use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='section-title'>Recent Patients</div>", unsafe_allow_html=True)
-        recent = patients[:6]
-        rows = ""
-        for p in recent:
-            g_st, g_col, _ = param_status("glucose",     p['glucose'])
-            h_st, h_col, _ = param_status("haemoglobin", p['haemoglobin'])
-            c_st, c_col, _ = param_status("cholesterol", p['cholesterol'])
-            rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
-            rows += f"""
-            <tr>
-                <td class='name-cell'>{p['full_name']}</td>
-                <td>{p['email']}</td>
-                <td class='val-cell'><span style='color:{g_col};font-weight:600;'>{p['glucose']}</span>
-                    <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
-                <td class='val-cell'><span style='color:{h_col};font-weight:600;'>{p['haemoglobin']}</span>
-                    <span style='font-size:0.7rem;color:#8a97aa;'> g/dL</span></td>
-                <td class='val-cell'><span style='color:{c_col};font-weight:600;'>{p['cholesterol']}</span>
-                    <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
-                <td>{rp}</td>
-                <td style='color:#8a97aa;font-size:0.78rem;'>{p['created_at'][:10]}</td>
-            </tr>"""
+        # Recent records table
+        st.markdown("---")
+        st.markdown('<p class="section-header">Recent Records</p>', unsafe_allow_html=True)
+        display_df = df[["full_name", "date_of_birth", "email", "glucose", "haemoglobin", "cholesterol", "remarks"]].head(10)
+        display_df.columns = ["Name", "DOB", "Email", "Glucose", "Haemoglobin", "Cholesterol", "AI Remarks"]
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        st.markdown(f"""
-        <div style='background:white;border:1px solid var(--border);border-radius:12px;
-                    overflow:hidden;box-shadow:var(--shadow-sm);'>
-        <table class='pt-table'>
-            <thead>
-                <tr>
-                    <th>Patient</th><th>Email</th>
-                    <th>Glucose</th><th>Haemoglobin</th><th>Cholesterol</th>
-                    <th>Risk</th><th>Added</th>
-                </tr>
-            </thead>
-            <tbody>{rows}</tbody>
-        </table>
-        </div>""", unsafe_allow_html=True)
 
-elif nav == "Add Patient":
-    st.markdown("<div class='section-title'>Register New Patient</div>", unsafe_allow_html=True)
-    with st.form("add_patient_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            full_name   = st.text_input("Full Name", placeholder="Enter your name")
-            email       = st.text_input("Email Address", placeholder="xxxxxxx@gmail.com")
-            glucose     = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
-                                           value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
-        with col2:
-            dob         = st.date_input("Date of Birth", max_value=date.today(), value=date(1990, 1, 1))
-            haemoglobin = st.number_input("Haemoglobin (g/dL)", min_value=0.0, max_value=25.0,
-                                           value=13.5, step=0.1, help="Normal: 12.0–17.5 g/dL")
-            cholesterol = st.number_input("Cholesterol (mg/dL)", min_value=0.0, max_value=700.0,
-                                           value=180.0, step=0.1, help="Desirable: <200 mg/dL")
-        st.markdown("<br>", unsafe_allow_html=True)
-        _, col_btn, _ = st.columns([1, 2, 1])
-        with col_btn:
-            submitted = st.form_submit_button("Analyze and Save Patient", use_container_width=True)
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: ADD PATIENT
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "➕ Add Patient":
+    st.markdown("## ➕ Add New Patient")
+    st.markdown("Enter patient details. AI will generate a health remark automatically.")
+    st.markdown("---")
+
+    with st.form("add_form", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            full_name = st.text_input("Full Name *", placeholder="e.g. Priya Sharma")
+            email     = st.text_input("Email Address *", placeholder="priya@example.com")
+            glucose   = st.number_input("Glucose (mg/dL) *", min_value=0.1, max_value=600.0, value=90.0, step=0.1)
+        with c2:
+            dob         = st.date_input("Date of Birth *", value=date(1990, 1, 1), max_value=date.today())
+            haemoglobin = st.number_input("Haemoglobin (g/dL) *", min_value=0.1, max_value=25.0, value=13.5, step=0.1)
+            cholesterol = st.number_input("Cholesterol (mg/dL) *", min_value=0.1, max_value=700.0, value=180.0, step=0.1)
+
+        st.markdown("")
+        submitted = st.form_submit_button("🤖 Analyse & Save Patient", use_container_width=True)
 
     if submitted:
-        errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
+        errors = validate_patient_form(full_name, str(dob), email, glucose, haemoglobin, cholesterol)
         if errors:
             for e in errors:
-                st.error(e)
+                st.error(f"⚠️ {e}")
         else:
-            with st.spinner("MedInsight AI is analyzing patient data..."):
-                try:
-                    remarks    = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
-                    patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
-                    if patient_id:
-                        risk = risk_pill(glucose, haemoglobin, cholesterol)
-                        st.success(f"Patient {full_name} registered successfully.")
-                        st.markdown(f"""
-                        <div class='medinsight-card'>
-                            <div style='display:flex;justify-content:space-between;
-                                        align-items:center;margin-bottom:14px;'>
-                                <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
-                                            text-transform:uppercase;letter-spacing:1.5px;'>
-                                    AI Health Assessment
-                                </div>
-                                {risk}
-                            </div>
-                            <div class='remarks-box'>{clean_md(remarks)}</div>
-                        </div>""", unsafe_allow_html=True)
-                    else:
-                        st.error("A patient with this email already exists.")
-                except Exception as ex:
-                    st.error(f"AI Analysis failed: {ex}")
+            with st.spinner("🧠 AI is analysing blood test results..."):
+                remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
 
-elif nav == "View Records":
-    st.markdown("<div class='section-title'>Patient Records</div>", unsafe_allow_html=True)
+            patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
+            if patient_id:
+                st.success(f"✅ Patient **{full_name}** saved successfully (ID: {patient_id})")
+                risk = get_risk_level(glucose, haemoglobin, cholesterol)
+                st.markdown(f"**Risk Level:** {risk}")
+                st.info(f"**AI Remark:** {remarks}")
+            else:
+                st.error("❌ Email already exists. Please use a unique email address.")
 
-    search_query = st.text_input("Search by name or email", placeholder="Type to search...")
-    patients     = search_patients(search_query) if search_query else read_all_patients()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: VIEW RECORDS
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📋 View Records":
+    st.markdown("## 📋 Patient Records")
+    st.markdown("---")
+
+    search_q = st.text_input("🔍 Search by name or email", placeholder="Type to search...")
+    st.markdown("")
+
+    patients = search_patients(search_q) if search_q else read_all_patients()
 
     if not patients:
         st.info("No records found.")
     else:
-        st.markdown(f"""<div style='font-size:0.72rem;color:#8a97aa;font-weight:600;
-                        text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;'>
-            {len(patients)} record(s) found</div>""", unsafe_allow_html=True)
-
-        def make_gauge(value, label, unit, low_ok, high_ok, max_val, pid_key):
-            status, color, _ = param_status(
-                {"Glucose":"glucose","Haemoglobin":"haemoglobin","Cholesterol":"cholesterol"}[label],
-                value
-            )
-            fig_g = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=value,
-                number=dict(suffix=f" {unit}",
-                            font=dict(size=19, family='IBM Plex Mono', color='#0c1629')),
-                title=dict(
-                    text=f"<b>{label}</b><br><span style='font-size:10px;color:{color};font-weight:700;'>{status}</span>",
-                    font=dict(size=12, family='Sora', color='#4a5568')
-                ),
-                gauge=dict(
-                    axis=dict(range=[0, max_val],
-                              tickfont=dict(size=8, color='#8a97aa'),
-                              tickcolor='#dde3ed'),
-                    bar=dict(color=color, thickness=0.55),
-                    bgcolor='#f0f4f8',
-                    borderwidth=0,
-                    steps=[
-                        dict(range=[0, low_ok],        color='#fffbeb'),
-                        dict(range=[low_ok, high_ok],  color='#ecfdf5'),
-                        dict(range=[high_ok, max_val], color='#fef2f2'),
-                    ],
-                    threshold=dict(line=dict(color=color, width=2),
-                                   thickness=0.75, value=value)
-                )
-            ))
-            fig_g.update_layout(
-                paper_bgcolor='white',
-                margin=dict(l=14, r=14, t=52, b=10),
-                height=195
-            )
-            return fig_g
+        st.markdown(f'<p class="section-header">{len(patients)} record(s) found</p>', unsafe_allow_html=True)
 
         for p in patients:
-            rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
-            label_str = p['full_name'] + " — " + ("High Risk" if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else ("Moderate" if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else "Healthy"))
+            risk = get_risk_level(p["glucose"], p["haemoglobin"], p["cholesterol"])
+            badge_cls = "badge-red" if "High" in risk else ("badge-yellow" if "Moderate" in risk else "badge-green")
 
-            with st.expander(p['full_name']):
-                # meta row
-                m1, m2, m3, m4 = st.columns(4)
-                m1.markdown(f"**Email**\n\n{p['email']}")
-                m2.markdown(f"**Date of Birth**\n\n{p['date_of_birth']}")
-                m3.markdown(f"**Added**\n\n{p['created_at'][:10]}")
-                m4.markdown(f"**Risk**")
-                m4.markdown(rp, unsafe_allow_html=True)
-                st.markdown("<div class='medinsight-divider'></div>", unsafe_allow_html=True)
+            with st.expander(f"🧑‍⚕️ {p['full_name']}  ·  {p['email']}  ·  {risk}", expanded=False):
+                c1, c2, c3 = st.columns(3)
+                c1.markdown(f"**DOB:** {p['date_of_birth']}")
+                c2.markdown(f"**ID:** {p['id']}")
+                c3.markdown(f"**Added:** {p['created_at'][:10]}")
 
-                gc1, gc2, gc3 = st.columns(3)
-                with gc1:
-                    st.plotly_chart(make_gauge(p['glucose'], "Glucose", "mg/dL",
-                                               70, 99, 300, f"g{p['id']}"),
-                                    use_container_width=True, key=f"gauge_g_{p['id']}")
-                with gc2:
-                    st.plotly_chart(make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL",
-                                               12.0, 17.5, 20.0, f"h{p['id']}"),
-                                    use_container_width=True, key=f"gauge_h_{p['id']}")
-                with gc3:
-                    st.plotly_chart(make_gauge(p['cholesterol'], "Cholesterol", "mg/dL",
-                                               0, 200, 300, f"c{p['id']}"),
-                                    use_container_width=True, key=f"gauge_c_{p['id']}")
+                c4, c5, c6 = st.columns(3)
+                c4.metric("Glucose", f"{p['glucose']} mg/dL")
+                c5.metric("Haemoglobin", f"{p['haemoglobin']} g/dL")
+                c6.metric("Cholesterol", f"{p['cholesterol']} mg/dL")
 
-                if p.get('remarks'):
-                    st.markdown(f"""
-                    <div class='remarks-box' style='margin-top:4px;'>
-                        <div class='remarks-label'>AI Clinical Remarks</div>
-                        {clean_md(p['remarks'])}
-                    </div>""", unsafe_allow_html=True)
+                st.markdown(f"**🤖 AI Remarks:** {p['remarks'] or '_No remark generated_'}")
 
-elif nav == "Update Record":
-    st.markdown("<div class='section-title'>Update Patient Record</div>", unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: EDIT PATIENT
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "✏️ Edit Patient":
+    st.markdown("## ✏️ Edit Patient Record")
+    st.markdown("---")
 
     patients = read_all_patients()
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
-        selected = st.selectbox("Select patient to update", list(options.keys()))
-        pid      = options[selected]
-        patient  = read_patient_by_id(pid)
+        options = {f"[{p['id']}] {p['full_name']} — {p['email']}": p["id"] for p in patients}
+        selected = st.selectbox("Select patient to edit", list(options.keys()))
+        pid = options[selected]
+        p = read_patient_by_id(pid)
 
-        if patient:
-            with st.form("update_form"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    full_name   = st.text_input("Full Name",    value=patient['full_name'])
-                    email       = st.text_input("Email Address",value=patient['email'])
-                    glucose     = st.number_input("Glucose (mg/dL)",    value=float(patient['glucose']),
-                                                   min_value=0.0, max_value=600.0, step=0.1)
-                with col2:
-                    dob_val     = datetime.strptime(patient['date_of_birth'], "%Y-%m-%d").date()
-                    dob         = st.date_input("Date of Birth", value=dob_val, max_value=date.today())
-                    haemoglobin = st.number_input("Haemoglobin (g/dL)", value=float(patient['haemoglobin']),
-                                                   min_value=0.0, max_value=25.0, step=0.1)
-                    cholesterol = st.number_input("Cholesterol (mg/dL)",value=float(patient['cholesterol']),
-                                                   min_value=0.0, max_value=700.0, step=0.1)
-                regen_ai = st.checkbox("Re-run AI Analysis with updated values", value=True)
-                _, col_btn, _ = st.columns([1, 2, 1])
-                with col_btn:
-                    update_btn = st.form_submit_button("Save Changes", use_container_width=True)
+        if p:
+            with st.form("edit_form"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    new_name  = st.text_input("Full Name", value=p["full_name"])
+                    new_email = st.text_input("Email", value=p["email"])
+                    new_gluc  = st.number_input("Glucose (mg/dL)", value=float(p["glucose"]), min_value=0.1, max_value=600.0, step=0.1)
+                with c2:
+                    new_dob   = st.date_input("Date of Birth", value=datetime.strptime(p["date_of_birth"], "%Y-%m-%d").date())
+                    new_haem  = st.number_input("Haemoglobin (g/dL)", value=float(p["haemoglobin"]), min_value=0.1, max_value=25.0, step=0.1)
+                    new_chol  = st.number_input("Cholesterol (mg/dL)", value=float(p["cholesterol"]), min_value=0.1, max_value=700.0, step=0.1)
 
-            if update_btn:
-                errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
+                regenerate = st.checkbox("🤖 Re-generate AI Remarks", value=False)
+                save_btn   = st.form_submit_button("💾 Save Changes", use_container_width=True)
+
+            if save_btn:
+                errors = validate_patient_form(new_name, str(new_dob), new_email, new_gluc, new_haem, new_chol)
                 if errors:
-                    for e in errors: st.error(e)
+                    for e in errors:
+                        st.error(f"⚠️ {e}")
                 else:
-                    remarks = patient.get('remarks', '')
-                    if regen_ai:
-                        with st.spinner("Re-analyzing..."):
-                            try:
-                                remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
-                            except Exception as ex:
-                                st.warning(f"AI analysis failed — keeping previous remarks. ({ex})")
-                    success = update_patient(pid, full_name, str(dob), email,
-                                             glucose, haemoglobin, cholesterol, remarks)
-                    if success:
-                        st.success(f"Patient record updated successfully.")
-                        if remarks:
-                            st.markdown(f"""
-                            <div class='medinsight-card'>
-                                <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
-                                            text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;'>
-                                    Updated AI Remarks
-                                </div>
-                                <div class='remarks-box'>{clean_md(remarks)}</div>
-                            </div>""", unsafe_allow_html=True)
-                    else:
-                        st.error("Update failed. Email may belong to another patient.")
+                    remarks = p["remarks"]
+                    if regenerate:
+                        with st.spinner("🧠 Re-generating AI remarks..."):
+                            remarks = predict_health_condition(new_name, str(new_dob), new_gluc, new_haem, new_chol)
 
-elif nav == "Delete Record":
-    st.markdown("<div class='section-title'>Delete Patient Record</div>", unsafe_allow_html=True)
+                    success = update_patient(pid, new_name, str(new_dob), new_email, new_gluc, new_haem, new_chol, remarks)
+                    if success:
+                        st.success(f"✅ Patient **{new_name}** updated successfully.")
+                        if regenerate:
+                            st.info(f"**New AI Remark:** {remarks}")
+                    else:
+                        st.error("❌ Update failed. Email may already be in use.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAGE: DELETE PATIENT
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "🗑️ Delete Patient":
+    st.markdown("## 🗑️ Delete Patient Record")
+    st.markdown("---")
 
     patients = read_all_patients()
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
+        options = {f"[{p['id']}] {p['full_name']} — {p['email']}": p["id"] for p in patients}
         selected = st.selectbox("Select patient to delete", list(options.keys()))
-        pid      = options[selected]
-        patient  = read_patient_by_id(pid)
+        pid = options[selected]
+        p   = read_patient_by_id(pid)
 
-        if patient:
-            rp = risk_pill(patient['glucose'], patient['haemoglobin'], patient['cholesterol'])
-            g_st, g_col, _ = param_status("glucose",     patient['glucose'])
-            h_st, h_col, _ = param_status("haemoglobin", patient['haemoglobin'])
-            c_st, c_col, _ = param_status("cholesterol", patient['cholesterol'])
+        if p:
+            st.markdown("### ⚠️ You are about to delete:")
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f"**Name:** {p['full_name']}")
+            c2.markdown(f"**Email:** {p['email']}")
+            c3.markdown(f"**DOB:** {p['date_of_birth']}")
 
-            st.markdown(f"""
-            <div class='delete-card'>
-                <div class='delete-card-title'>Patient to be Deleted</div>
-                <table class='delete-table'>
-                    <tr>
-                        <td><strong>Name:</strong> {patient['full_name']}</td>
-                        <td><strong>Email:</strong> {patient['email']}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Date of Birth:</strong> {patient['date_of_birth']}</td>
-                        <td><strong>Risk Level:</strong> {rp}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Glucose:</strong>
-                            <span style='color:{g_col};font-weight:600;'>{patient['glucose']} mg/dL</span>
-                            &nbsp;<span style='font-size:0.7rem;color:{g_col};'>{g_st}</span></td>
-                        <td><strong>Haemoglobin:</strong>
-                            <span style='color:{h_col};font-weight:600;'>{patient['haemoglobin']} g/dL</span>
-                            &nbsp;<span style='font-size:0.7rem;color:{h_col};'>{h_st}</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Cholesterol:</strong>
-                            <span style='color:{c_col};font-weight:600;'>{patient['cholesterol']} mg/dL</span>
-                            &nbsp;<span style='font-size:0.7rem;color:{c_col};'>{c_st}</span></td>
-                        <td></td>
-                    </tr>
-                </table>
-            </div>""", unsafe_allow_html=True)
+            c4, c5, c6 = st.columns(3)
+            c4.metric("Glucose", f"{p['glucose']} mg/dL")
+            c5.metric("Haemoglobin", f"{p['haemoglobin']} g/dL")
+            c6.metric("Cholesterol", f"{p['cholesterol']} mg/dL")
 
-            st.warning("This action is permanent and cannot be undone.")
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("Confirm Delete", type="primary"):
-                    if delete_patient(pid):
-                        st.success(f"{patient['full_name']} has been deleted.")
-                        st.rerun()
-                    else:
-                        st.error("Deletion failed.")
-            with col2:
-                if st.button("Cancel"):
-                    st.info("Deletion cancelled.")
+            st.markdown("")
+            confirm = st.checkbox("✅ I confirm I want to permanently delete this record")
+
+            if st.button("🗑️ Delete Patient", disabled=not confirm):
+                if delete_patient(pid):
+                    st.success(f"✅ Patient **{p['full_name']}** has been deleted.")
+                    st.rerun()
+                else:
+                    st.error("❌ Deletion failed.")
