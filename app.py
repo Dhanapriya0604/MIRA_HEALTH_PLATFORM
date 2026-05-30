@@ -197,7 +197,103 @@ div[data-testid="stDataFrame"] {
     background: #1e293b !important;
     border: 1px solid #334155 !important;
 }
+/* Animated Background */
+.stApp {
+    background:
+        radial-gradient(circle at 20% 20%, rgba(14,165,233,0.15), transparent 25%),
+        radial-gradient(circle at 80% 80%, rgba(6,182,212,0.15), transparent 25%),
+        #0f172a;
+}
+
+/* Floating Cards */
+.mira-card,
+.metric-box {
+    transition: all 0.35s ease;
+}
+
+.mira-card:hover,
+.metric-box:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 15px 40px rgba(14,165,233,0.25);
+    border-color: #0ea5e9;
+}
+
+/* Glassmorphism */
+.glass-card {
+    background: rgba(30,41,59,0.7);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px;
+}
+
+/* Glow Animation */
+@keyframes glow {
+    0% { box-shadow: 0 0 5px rgba(14,165,233,.2);}
+    50% { box-shadow: 0 0 25px rgba(14,165,233,.5);}
+    100% { box-shadow: 0 0 5px rgba(14,165,233,.2);}
+}
+
+.metric-box {
+    animation: glow 4s infinite;
+}
+
+/* Neon Header */
+.mira-logo-text {
+    text-shadow:
+        0 0 10px rgba(14,165,233,.5),
+        0 0 20px rgba(14,165,233,.4),
+        0 0 30px rgba(14,165,233,.3);
+}
+
+/* Input Focus Effect */
+.stTextInput input:focus,
+.stNumberInput input:focus {
+    border: 1px solid #0ea5e9 !important;
+    box-shadow: 0 0 15px rgba(14,165,233,.4) !important;
+}
+
+/* Button Shine */
+.stButton button {
+    position: relative;
+    overflow: hidden;
+}
+
+.stButton button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255,255,255,.3),
+        transparent
+    );
+    transition: .6s;
+}
+
+.stButton button:hover::before {
+    left: 120%;
+}
 </style>
+""", unsafe_allow_html=True)
+st.markdown("""
+<div style="
+background:rgba(30,41,59,.7);
+backdrop-filter:blur(15px);
+padding:35px;
+border-radius:25px;
+border:1px solid rgba(255,255,255,.1);
+text-align:center;
+margin-bottom:20px;
+">
+<h1 style="font-size:3rem;">🏥 MIRA AI</h1>
+<p style="color:#94a3b8;">
+Medical Intelligence & Risk Prediction Platform
+</p>
+</div>
 """, unsafe_allow_html=True)
 
 # ─── SIDEBAR ────────────────────────────────────────────────────────────────────
