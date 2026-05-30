@@ -441,13 +441,7 @@ hr {
     margin: 20px 0;
 }
 
-/* ── SUBTLE GRID BG ON HEADER ── */
-.grid-bg {
-    background-image:
-        linear-gradient(rgba(26,86,219,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(26,86,219,0.04) 1px, transparent 1px);
-    background-size: 28px 28px;
-}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -483,7 +477,7 @@ with st.sidebar:
 
 # ── HEADER ───────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class='mira-header grid-bg'>
+
     <div class='mira-logo-text'>MIRA</div>
     <div class='mira-subtitle'>Medical Intelligence Robotic Automation</div>
     <div style='display:flex; justify-content:center; margin-top:14px;'>
@@ -544,10 +538,9 @@ if nav == "Dashboard":
                 font=dict(color='#475569', family='DM Sans', size=11),
                 legend=dict(bgcolor='white', bordercolor='#e2e8f0',
                             borderwidth=1, font=dict(size=11)),
-                xaxis=dict(gridcolor='#e2e8f0', showgrid=True,
-                           linecolor='#e2e8f0', tickfont=dict(size=10)),
-                yaxis=dict(gridcolor='#e2e8f0', showgrid=True,
-                           linecolor='#e2e8f0'),
+                xaxis=dict(showgrid=False, linecolor='#e2e8f0',
+                           tickfont=dict(size=10)),
+                yaxis=dict(showgrid=False, linecolor='#e2e8f0'),
                 margin=dict(l=0, r=0, t=10, b=0),
                 height=300
             )
