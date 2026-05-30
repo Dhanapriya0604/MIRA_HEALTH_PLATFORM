@@ -1,4 +1,4 @@
-# MedInsight — AI-Powered Health Risk Assessment Platform
+# MEDINSIGHT — AI-Powered Health Risk Assessment Platform
 
 MedInsight is a health prediction web application built with Python and Streamlit. It collects patient blood test data, performs AI-based health risk assessment using the Groq API, and stores all records persistently in SQLite. The application supports complete CRUD operations with a clean, production-grade interface.
 
@@ -17,12 +17,12 @@ MedInsight is a health prediction web application built with Python and Streamli
 
 ## Tech Stack
 
-| Layer        | Technology                          |
-|--------------|-------------------------------------|
-| Frontend     | Streamlit, Plotly, Custom CSS       |
-| Backend      | Python 3.11+                        |
-| AI API       | Groq API — llama-3.3-70b-versatile  |
-| Database     | SQLite3 (Python standard library)   |
+     | Layer                                       | Technology                                |
+     |---------------------------------------------|-------------------------------------------|
+     | Frontend                                    | Streamlit, Plotly, Custom CSS             | 
+     | Backend                                     | Python 3.11+                              |
+     | AI API                                      | Groq API — llama-3.3-70b-versatile        |
+     | Database                                    | SQLite3 (Python standard library)         |
 
 ---
 
@@ -75,11 +75,11 @@ streamlit run app.py
 
 ## Blood Parameter Reference Ranges
 
-| Parameter    | Normal          | At Risk         | High Risk    |
-|--------------|-----------------|-----------------|--------------|
-| Glucose      | 70-99 mg/dL     | 100-125 mg/dL   | >126 mg/dL   |
-| Haemoglobin  | 12.0-17.5 g/dL  | 8.0-12.0 g/dL   | <8.0 g/dL    |
-| Cholesterol  | <200 mg/dL      | 200-239 mg/dL   | >240 mg/dL   |
+                  | Parameter    | Normal          | At Risk         | High Risk    |
+                  |--------------|-----------------|-----------------|--------------|
+                  | Glucose      | 70-99 mg/dL     | 100-125 mg/dL   | >126 mg/dL   |
+                  | Haemoglobin  | 12.0-17.5 g/dL  | 8.0-12.0 g/dL   | <8.0 g/dL    |
+                  | Cholesterol  | <200 mg/dL      | 200-239 mg/dL   | >240 mg/dL   |
 
 ---
 
@@ -87,19 +87,19 @@ streamlit run app.py
 
 The application uses the Groq API with the `llama-3.3-70b-versatile` model to evaluate a patient's blood test values against clinical reference ranges and generate a concise 3-sentence clinical remark. The remark is stored in the database and displayed alongside the patient record.
 
-A secondary rule-based scoring function provides an instant risk category label — Healthy, Moderate Risk, or High Risk — used across the dashboard and records view.
+A secondary rule-based scoring function provides an instant risk category label as Healthy, Moderate Risk, or High Risk used across the dashboard and records view.
 
 ---
 
 ## Application Pages
 
-| Page           | Description                                                            |
-|----------------|------------------------------------------------------------------------|
-| Home           | KPI metrics, blood parameter bar chart, risk donut chart, recent table |
-| Add Patient    | Validated form with AI remark generated on save                        |
-| View Records   | Searchable list with gauge charts and AI remarks per patient           |
-| Update Record  | Pre-filled edit form with optional AI remark regeneration              |
-| Delete Record  | Patient summary with confirmation before permanent deletion            |
+        | Page           | Description                                                            |
+        |----------------|------------------------------------------------------------------------|
+        | Home           | KPI metrics, blood parameter bar chart, risk donut chart, recent table |
+        | Add Patient    | Validated form with AI remark generated on save                        |
+        | View Records   | Searchable list with gauge charts and AI remarks per patient           |
+        | Update Record  | Pre-filled edit form with optional AI remark regeneration              |
+        | Delete Record  | Patient summary with confirmation before permanent deletion            |
 
 ---
 
