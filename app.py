@@ -649,7 +649,7 @@ if nav == "Home":
             for key, label, max_val, unit in params:
                 raw_vals = df[key].tolist()
                 pct_vals = [v / max_val * 100 for v in raw_vals]
-                  colors = [param_status(key, v)[1] for v in raw_vals]
+                colors = [param_status(key, v)[1] for v in raw_vals]
 
                 fig.add_trace(go.Bar(
                     name=label,
