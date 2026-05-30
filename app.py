@@ -2,17 +2,20 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import date, datetime
-from database import init_db, create_patient, read_all_patients, read_patient_by_id, update_patient, delete_patient, search_patients
+from database import (init_db, create_patient, read_all_patients,
+                      read_patient_by_id, update_patient, delete_patient,
+                      search_patients)
 from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
 
 st.set_page_config(
     page_title="MedInsight",
-    page_icon="assets/favicon.ico",
+    page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 init_db()
+
 THRESHOLDS = {
     "glucose":     {"low": 70,   "high": 99,   "max": 300,  "unit": "mg/dL"},
     "haemoglobin": {"low": 12.0, "high": 17.5, "max": 20.0, "unit": "g/dL"},
@@ -28,12 +31,20 @@ def param_status(key, value):
     else:
         return "High",   "#dc2626", "#fef2f2"
 
-def bar_color_for_patient(p):
-    out = {}
-    for key in ("glucose", "haemoglobin", "cholesterol"):
-        _, color, _ = param_status(key, p[key])
-        out[key] = color
-    return out
+def risk_pill(g, h, c):
+    raw = get_risk_level(g, h, c)
+    if "🔴" in raw:
+        return "<span class='pill pill-high'>High Risk</span>"
+    elif "🟡" in raw:
+        return "<span class='pill pill-moderate'>Moderate</span>"
+    return "<span class='pill pill-healthy'>Healthy</span>"
+
+def clean_md(text):
+    import re
+    text = re.sub(r'\*+', '', text)
+    text = re.sub(r'#+\s*', '', text)
+    text = re.sub(r'\?+\s*', '', text)
+    return text.strip()
 
 st.markdown("""
 <style>
@@ -49,9 +60,6 @@ st.markdown("""
     --warning-light:  #fffbeb;
     --danger:         #dc2626;
     --danger-light:   #fef2f2;
-    --normal-bar:     #059669;
-    --low-bar:        #d97706;
-    --high-bar:       #dc2626;
     --bg:             #f0f4f8;
     --bg-white:       #ffffff;
     --surface:        #f7f9fc;
@@ -100,6 +108,7 @@ html, body, [class*="css"] {
     display: flex; align-items: center; justify-content: center;
     font-size: 1rem;
     box-shadow: 0 2px 8px rgba(24,71,194,0.25);
+    color: white;
 }
 .sidebar-logo-name {
     font-family: 'Sora', sans-serif;
@@ -115,7 +124,6 @@ html, body, [class*="css"] {
     text-transform: uppercase;
     padding-left: 46px;
 }
-
 .nav-section-label {
     font-size: 0.6rem;
     font-weight: 700;
@@ -124,7 +132,6 @@ html, body, [class*="css"] {
     letter-spacing: 2px;
     padding: 0 14px 6px;
 }
-
 .sidebar-meta {
     margin: 16px 0 0;
     border-top: 1px solid var(--border);
@@ -176,7 +183,6 @@ html, body, [class*="css"] {
     align-items: center;
     justify-content: space-between;
 }
-.medinsight-header-left {}
 .medinsight-header-title {
     font-size: 1.85rem;
     font-weight: 700;
@@ -293,13 +299,6 @@ html, body, [class*="css"] {
     color: var(--card-color, #1847c2);
     letter-spacing: -2px;
 }
-.chart-card {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 20px 12px;
-    box-shadow: var(--shadow-sm);
-}
 .legend-row {
     display: flex;
     gap: 14px;
@@ -341,9 +340,7 @@ html, body, [class*="css"] {
     border-bottom: 1px solid var(--border);
     transition: background 0.15s;
 }
-.pt-table tbody tr:hover {
-    background: var(--surface);
-}
+.pt-table tbody tr:hover { background: var(--surface); }
 .pt-table tbody td {
     padding: 11px 14px;
     color: var(--text-secondary);
@@ -369,8 +366,6 @@ html, body, [class*="css"] {
 .pill-healthy  { background: #ecfdf5; color: #059669; }
 .pill-moderate { background: #fffbeb; color: #d97706; }
 .pill-high     { background: #fef2f2; color: #dc2626; }
-.pill-normal   { background: #ecfdf5; color: #059669; }
-.pill-low      { background: #fffbeb; color: #d97706; }
 .medinsight-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -465,14 +460,12 @@ label, .stTextInput label, .stNumberInput label,
     text-transform: uppercase !important;
     letter-spacing: 0.8px !important;
 }
-
 div[data-testid="stDataFrame"] {
     border-radius: var(--radius);
     overflow: hidden;
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
 }
-
 .stAlert { border-radius: var(--radius-sm) !important; }
 hr { border-color: var(--border); margin: 10px 0 18px; }
 [data-testid="stRadio"] label {
@@ -486,7 +479,6 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
     transition: background 0.15s;
 }
 [data-testid="stRadio"] label:hover { background: var(--surface); }
-
 .stCheckbox label {
     text-transform: none !important;
     letter-spacing: 0 !important;
@@ -494,7 +486,6 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
     color: var(--text-primary) !important;
     font-weight: 400 !important;
 }
-
 .empty-state {
     background: var(--bg-white);
     border: 2px dashed var(--border-strong);
@@ -510,7 +501,6 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
 }
 .empty-sub { font-size: 0.83rem; color: var(--text-muted); }
 .medinsight-divider { height: 1px; background: var(--border); margin: 18px 0; }
-
 .delete-card {
     background: #fff9f9;
     border: 1px solid #fecaca;
@@ -540,17 +530,7 @@ hr { border-color: var(--border); margin: 10px 0 18px; }
 </style>
 """, unsafe_allow_html=True)
 
-def risk_pill(g, h, c):
-    raw = get_risk_level(g, h, c)
-    if "🔴" in raw:
-        return "<span class='pill pill-high'>High Risk</span>"
-    elif "🟡" in raw:
-        return "<span class='pill pill-moderate'>Moderate</span>"
-    return "<span class='pill pill-healthy'>Healthy</span>"
-
-def clean_md(text):
-    return text.replace("**","").replace("*","").replace("??","").replace("##","").strip()
-
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
     <div class='sidebar-logo'>
@@ -567,11 +547,39 @@ with st.sidebar:
                         "Update Record", "Delete Record"],
                    label_visibility="collapsed")
 
+    patients_all = read_all_patients()
+    total_all    = len(patients_all)
+    high_all     = sum(1 for p in patients_all if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
+    mod_all      = sum(1 for p in patients_all if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
+    healthy_all  = sum(1 for p in patients_all if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
+
+    st.markdown(f"""
+    <div class='sidebar-meta'>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>Total Patients</span>
+            <span class='sidebar-meta-val'>{total_all}</span>
+        </div>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>Healthy</span>
+            <span class='sidebar-meta-val' style='color:#059669;'>{healthy_all}</span>
+        </div>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>Moderate Risk</span>
+            <span class='sidebar-meta-val' style='color:#d97706;'>{mod_all}</span>
+        </div>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>High Risk</span>
+            <span class='sidebar-meta-val' style='color:#dc2626;'>{high_all}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ── Page Header ───────────────────────────────────────────────────────────────
 st.markdown("""
 <div class='medinsight-header'>
     <div class='medinsight-header-stripe'></div>
     <div class='medinsight-header-body'>
-        <div class='medinsight-header-left'>
+        <div>
             <div class='medinsight-header-title'>MedInsight</div>
             <div class='medinsight-header-sub'>AI-Powered Health Risk Assessment &amp; Patient Management</div>
         </div>
@@ -586,12 +594,17 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HOME
+# ═══════════════════════════════════════════════════════════════════════════════
 if nav == "Home":
-    patients  = read_all_patients()
-    total     = len(patients)
+    patients = read_all_patients()
+    total    = len(patients)
     high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     moderate  = sum(1 for p in patients if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     healthy   = sum(1 for p in patients if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
+
     c1, c2, c3, c4 = st.columns(4)
     kpis = [
         (total,     "Total Patients", "#1847c2", "T"),
@@ -606,6 +619,7 @@ if nav == "Home":
             <div class='metric-number'>{val}</div>
             <div class='metric-title'>{label}</div>
         </div>""", unsafe_allow_html=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
 
     if not patients:
@@ -616,23 +630,22 @@ if nav == "Home":
         </div>""", unsafe_allow_html=True)
     else:
         col_left, col_right = st.columns([3, 2])
+
         with col_left:
             st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
-            df = pd.DataFrame(patients)
+            df    = pd.DataFrame(patients)
             names = df['full_name'].tolist()
-            G_MAX, C_MAX, H_MAX = 300.0, 300.0, 20.0
 
             params = [
-                ("glucose",     "Glucose",     G_MAX, "mg/dL"),
-                ("cholesterol", "Cholesterol", C_MAX, "mg/dL"),
-                ("haemoglobin", "Haemoglobin", H_MAX, "g/dL"),
+                ("glucose",     "Glucose",     300.0, "mg/dL"),
+                ("cholesterol", "Cholesterol", 300.0, "mg/dL"),
+                ("haemoglobin", "Haemoglobin",  20.0, "g/dL"),
             ]
             fig = go.Figure()
             for key, label, max_val, unit in params:
                 raw_vals = df[key].tolist()
                 pct_vals = [v / max_val * 100 for v in raw_vals]
-                colors = [param_status(key, v)[1] for v in raw_vals]
-
+                colors   = [param_status(key, v)[1] for v in raw_vals]
                 fig.add_trace(go.Bar(
                     name=label,
                     x=names,
@@ -640,22 +653,15 @@ if nav == "Home":
                     text=[f"{v} {unit}" for v in raw_vals],
                     textposition='outside',
                     textfont=dict(size=9.5, color='#4a5568', family='IBM Plex Mono'),
-                    marker=dict(
-                        color=colors,
-                        opacity=0.90,
-                        line=dict(color='white', width=1.5),
-                        cornerradius=4,
-                    ),
+                    marker=dict(color=colors, opacity=0.90,
+                                line=dict(color='white', width=1.5),
+                                cornerradius=4),
                     hovertemplate=(
-                        f"<b>%{{x}}</b><br>"
-                        f"{label}: <b>%{{customdata}} {unit}</b><br>"
-                        f"% of range: %{{y:.1f}}%<extra></extra>"
+                        f"<b>%{{x}}</b><br>{label}: <b>%{{customdata}} {unit}</b>"
+                        f"<br>% of range: %{{y:.1f}}%<extra></extra>"
                     ),
                     customdata=raw_vals,
-                    legendgroup=label,
-                    showlegend=False,  
                 ))
-
             fig.update_layout(
                 barmode='group',
                 paper_bgcolor='white', plot_bgcolor='white',
@@ -669,10 +675,8 @@ if nav == "Home":
                 legend=dict(visible=False),
             )
             st.plotly_chart(fig, use_container_width=True)
-
             st.markdown("""
-            <div style='display:flex;justify-content:space-between;align-items:center;
-                        padding:0 4px;margin-top:-6px;'>
+            <div style='display:flex;justify-content:space-between;padding:0 4px;margin-top:-6px;'>
                 <div class='legend-row'>
                     <span class='legend-pill'><span class='legend-dot' style='background:#1847c2'></span>Glucose</span>
                     <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Cholesterol</span>
@@ -683,22 +687,18 @@ if nav == "Home":
                     <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Low</span>
                     <span class='legend-pill'><span class='legend-dot' style='background:#dc2626'></span>High</span>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
         with col_right:
             st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
             fig2 = go.Figure(data=[go.Pie(
                 labels=['Healthy', 'Moderate', 'High Risk'],
-                values=[healthy if healthy else 0.001,
-                        moderate if moderate else 0.001,
+                values=[healthy   if healthy   else 0.001,
+                        moderate  if moderate  else 0.001,
                         high_risk if high_risk else 0.001],
                 hole=0.65,
-                marker=dict(
-                    colors=['#059669', '#d97706', '#dc2626'],
-                    line=dict(color='white', width=3)
-                ),
+                marker=dict(colors=['#059669', '#d97706', '#dc2626'],
+                            line=dict(color='white', width=3)),
                 textfont=dict(size=11, family='Sora'),
                 textinfo='percent',
                 hovertemplate='<b>%{label}</b><br>%{value} patients<extra></extra>',
@@ -706,13 +706,9 @@ if nav == "Home":
             fig2.update_layout(
                 paper_bgcolor='white', plot_bgcolor='white',
                 font=dict(color='#4a5568', family='Sora'),
-                legend=dict(
-                    orientation='v',
-                    bgcolor='white',
-                    font=dict(size=11),
-                    x=0.75, y=0.5,
-                    xanchor='left', yanchor='middle'
-                ),
+                legend=dict(orientation='v', bgcolor='white',
+                            font=dict(size=11), x=0.75, y=0.5,
+                            xanchor='left', yanchor='middle'),
                 margin=dict(l=0, r=60, t=10, b=10),
                 height=265,
                 annotations=[dict(
@@ -723,13 +719,11 @@ if nav == "Home":
                 )]
             )
             st.plotly_chart(fig2, use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>Recent Patients</div>", unsafe_allow_html=True)
-        recent = patients[:6]
         rows = ""
-        for p in recent:
+        for p in patients[:6]:
             g_st, g_col, _ = param_status("glucose",     p['glucose'])
             h_st, h_col, _ = param_status("haemoglobin", p['haemoglobin'])
             c_st, c_col, _ = param_status("cholesterol", p['cholesterol'])
@@ -738,11 +732,14 @@ if nav == "Home":
             <tr>
                 <td class='name-cell'>{p['full_name']}</td>
                 <td>{p['email']}</td>
-                <td class='val-cell'><span style='color:{g_col};font-weight:600;'>{p['glucose']}</span>
+                <td class='val-cell'>
+                    <span style='color:{g_col};font-weight:600;'>{p['glucose']}</span>
                     <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
-                <td class='val-cell'><span style='color:{h_col};font-weight:600;'>{p['haemoglobin']}</span>
+                <td class='val-cell'>
+                    <span style='color:{h_col};font-weight:600;'>{p['haemoglobin']}</span>
                     <span style='font-size:0.7rem;color:#8a97aa;'> g/dL</span></td>
-                <td class='val-cell'><span style='color:{c_col};font-weight:600;'>{p['cholesterol']}</span>
+                <td class='val-cell'>
+                    <span style='color:{c_col};font-weight:600;'>{p['cholesterol']}</span>
                     <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
                 <td>{rp}</td>
                 <td style='color:#8a97aa;font-size:0.78rem;'>{p['created_at'][:10]}</td>
@@ -751,33 +748,38 @@ if nav == "Home":
         st.markdown(f"""
         <div style='background:white;border:1px solid var(--border);border-radius:12px;
                     overflow:hidden;box-shadow:var(--shadow-sm);'>
-        <table class='pt-table'>
-            <thead>
-                <tr>
-                    <th>Patient</th><th>Email</th>
-                    <th>Glucose</th><th>Haemoglobin</th><th>Cholesterol</th>
-                    <th>Risk</th><th>Added</th>
-                </tr>
-            </thead>
-            <tbody>{rows}</tbody>
-        </table>
+            <table class='pt-table'>
+                <thead>
+                    <tr>
+                        <th>Patient</th><th>Email</th>
+                        <th>Glucose</th><th>Haemoglobin</th><th>Cholesterol</th>
+                        <th>Risk</th><th>Added</th>
+                    </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
         </div>""", unsafe_allow_html=True)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADD PATIENT
+# ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Add Patient":
     st.markdown("<div class='section-title'>Register New Patient</div>", unsafe_allow_html=True)
+
     with st.form("add_patient_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            full_name   = st.text_input("Full Name", placeholder="Enter your name")
-            email       = st.text_input("Email Address", placeholder="xxxxxxx@gmail.com")
-            glucose     = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
-                                           value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
+            full_name   = st.text_input("Full Name",       placeholder="e.g. Priya Sharma")
+            email       = st.text_input("Email Address",   placeholder="example@gmail.com")
+            glucose     = st.number_input("Glucose (mg/dL)", min_value=0.1, max_value=600.0,
+                                          value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
         with col2:
             dob         = st.date_input("Date of Birth", max_value=date.today(), value=date(1990, 1, 1))
-            haemoglobin = st.number_input("Haemoglobin (g/dL)", min_value=0.0, max_value=25.0,
-                                           value=13.5, step=0.1, help="Normal: 12.0–17.5 g/dL")
-            cholesterol = st.number_input("Cholesterol (mg/dL)", min_value=0.0, max_value=700.0,
-                                           value=180.0, step=0.1, help="Desirable: <200 mg/dL")
+            haemoglobin = st.number_input("Haemoglobin (g/dL)", min_value=0.1, max_value=25.0,
+                                          value=13.5, step=0.1, help="Normal: 12.0–17.5 g/dL")
+            cholesterol = st.number_input("Cholesterol (mg/dL)", min_value=0.1, max_value=700.0,
+                                          value=180.0, step=0.1, help="Desirable: <200 mg/dL")
         st.markdown("<br>", unsafe_allow_html=True)
         _, col_btn, _ = st.columns([1, 2, 1])
         with col_btn:
@@ -792,9 +794,10 @@ elif nav == "Add Patient":
             with st.spinner("MedInsight AI is analyzing patient data..."):
                 try:
                     remarks    = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
-                    patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
+                    patient_id = create_patient(full_name, str(dob), email, glucose,
+                                                haemoglobin, cholesterol, remarks)
                     if patient_id:
-                        risk = risk_pill(glucose, haemoglobin, cholesterol)
+                        rp = risk_pill(glucose, haemoglobin, cholesterol)
                         st.success(f"Patient {full_name} registered successfully.")
                         st.markdown(f"""
                         <div class='medinsight-card'>
@@ -804,15 +807,19 @@ elif nav == "Add Patient":
                                             text-transform:uppercase;letter-spacing:1.5px;'>
                                     AI Health Assessment
                                 </div>
-                                {risk}
+                                {rp}
                             </div>
                             <div class='remarks-box'>{clean_md(remarks)}</div>
                         </div>""", unsafe_allow_html=True)
                     else:
                         st.error("A patient with this email already exists.")
                 except Exception as ex:
-                    st.error(f"AI Analysis failed: {ex}")
+                    st.error(f"AI analysis failed: {ex}")
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VIEW RECORDS
+# ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "View Records":
     st.markdown("<div class='section-title'>Patient Records</div>", unsafe_allow_html=True)
 
@@ -822,15 +829,15 @@ elif nav == "View Records":
     if not patients:
         st.info("No records found.")
     else:
-        st.markdown(f"""<div style='font-size:0.72rem;color:#8a97aa;font-weight:600;
-                        text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;'>
-            {len(patients)} record(s) found</div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='font-size:0.72rem;color:#8a97aa;font-weight:600;
+                    text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;'>
+            {len(patients)} record(s) found
+        </div>""", unsafe_allow_html=True)
 
-        def make_gauge(value, label, unit, low_ok, high_ok, max_val, pid_key):
-            status, color, _ = param_status(
-                {"Glucose":"glucose","Haemoglobin":"haemoglobin","Cholesterol":"cholesterol"}[label],
-                value
-            )
+        def make_gauge(value, label, unit, low_ok, high_ok, max_val):
+            key_map = {"Glucose": "glucose", "Haemoglobin": "haemoglobin", "Cholesterol": "cholesterol"}
+            status, color, _ = param_status(key_map[label], value)
             fig_g = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=value,
@@ -865,31 +872,28 @@ elif nav == "View Records":
 
         for p in patients:
             rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
-            label_str = p['full_name'] + " — " + ("High Risk" if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else ("Moderate" if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else "Healthy"))
-
             with st.expander(p['full_name']):
-                # meta row
                 m1, m2, m3, m4 = st.columns(4)
                 m1.markdown(f"**Email**\n\n{p['email']}")
                 m2.markdown(f"**Date of Birth**\n\n{p['date_of_birth']}")
                 m3.markdown(f"**Added**\n\n{p['created_at'][:10]}")
-                m4.markdown(f"**Risk**")
+                m4.markdown("**Risk**")
                 m4.markdown(rp, unsafe_allow_html=True)
                 st.markdown("<div class='medinsight-divider'></div>", unsafe_allow_html=True)
 
                 gc1, gc2, gc3 = st.columns(3)
                 with gc1:
-                    st.plotly_chart(make_gauge(p['glucose'], "Glucose", "mg/dL",
-                                               70, 99, 300, f"g{p['id']}"),
-                                    use_container_width=True, key=f"gauge_g_{p['id']}")
+                    st.plotly_chart(
+                        make_gauge(p['glucose'], "Glucose", "mg/dL", 70, 99, 300),
+                        use_container_width=True, key=f"gauge_g_{p['id']}")
                 with gc2:
-                    st.plotly_chart(make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL",
-                                               12.0, 17.5, 20.0, f"h{p['id']}"),
-                                    use_container_width=True, key=f"gauge_h_{p['id']}")
+                    st.plotly_chart(
+                        make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL", 12.0, 17.5, 20.0),
+                        use_container_width=True, key=f"gauge_h_{p['id']}")
                 with gc3:
-                    st.plotly_chart(make_gauge(p['cholesterol'], "Cholesterol", "mg/dL",
-                                               0, 200, 300, f"c{p['id']}"),
-                                    use_container_width=True, key=f"gauge_c_{p['id']}")
+                    st.plotly_chart(
+                        make_gauge(p['cholesterol'], "Cholesterol", "mg/dL", 0, 200, 300),
+                        use_container_width=True, key=f"gauge_c_{p['id']}")
 
                 if p.get('remarks'):
                     st.markdown(f"""
@@ -898,6 +902,10 @@ elif nav == "View Records":
                         {clean_md(p['remarks'])}
                     </div>""", unsafe_allow_html=True)
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UPDATE RECORD
+# ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Update Record":
     st.markdown("<div class='section-title'>Update Patient Record</div>", unsafe_allow_html=True)
 
@@ -905,7 +913,7 @@ elif nav == "Update Record":
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
+        options  = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
         selected = st.selectbox("Select patient to update", list(options.keys()))
         pid      = options[selected]
         patient  = read_patient_by_id(pid)
@@ -914,17 +922,17 @@ elif nav == "Update Record":
             with st.form("update_form"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    full_name   = st.text_input("Full Name",    value=patient['full_name'])
-                    email       = st.text_input("Email Address",value=patient['email'])
+                    full_name   = st.text_input("Full Name",     value=patient['full_name'])
+                    email       = st.text_input("Email Address", value=patient['email'])
                     glucose     = st.number_input("Glucose (mg/dL)",    value=float(patient['glucose']),
-                                                   min_value=0.0, max_value=600.0, step=0.1)
+                                                  min_value=0.1, max_value=600.0, step=0.1)
                 with col2:
                     dob_val     = datetime.strptime(patient['date_of_birth'], "%Y-%m-%d").date()
                     dob         = st.date_input("Date of Birth", value=dob_val, max_value=date.today())
                     haemoglobin = st.number_input("Haemoglobin (g/dL)", value=float(patient['haemoglobin']),
-                                                   min_value=0.0, max_value=25.0, step=0.1)
-                    cholesterol = st.number_input("Cholesterol (mg/dL)",value=float(patient['cholesterol']),
-                                                   min_value=0.0, max_value=700.0, step=0.1)
+                                                  min_value=0.1, max_value=25.0, step=0.1)
+                    cholesterol = st.number_input("Cholesterol (mg/dL)", value=float(patient['cholesterol']),
+                                                  min_value=0.1, max_value=700.0, step=0.1)
                 regen_ai = st.checkbox("Re-run AI Analysis with updated values", value=True)
                 _, col_btn, _ = st.columns([1, 2, 1])
                 with col_btn:
@@ -933,20 +941,22 @@ elif nav == "Update Record":
             if update_btn:
                 errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
                 if errors:
-                    for e in errors: st.error(e)
+                    for e in errors:
+                        st.error(e)
                 else:
                     remarks = patient.get('remarks', '')
                     if regen_ai:
-                        with st.spinner("Re-analyzing..."):
+                        with st.spinner("Re-analyzing with updated values..."):
                             try:
-                                remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
+                                remarks = predict_health_condition(
+                                    full_name, str(dob), glucose, haemoglobin, cholesterol)
                             except Exception as ex:
                                 st.warning(f"AI analysis failed — keeping previous remarks. ({ex})")
                     success = update_patient(pid, full_name, str(dob), email,
                                              glucose, haemoglobin, cholesterol, remarks)
                     if success:
-                        st.success(f"Patient record updated successfully.")
-                        if remarks:
+                        st.success("Patient record updated successfully.")
+                        if remarks and regen_ai:
                             st.markdown(f"""
                             <div class='medinsight-card'>
                                 <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
@@ -958,6 +968,10 @@ elif nav == "Update Record":
                     else:
                         st.error("Update failed. Email may belong to another patient.")
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DELETE RECORD
+# ═══════════════════════════════════════════════════════════════════════════════
 elif nav == "Delete Record":
     st.markdown("<div class='section-title'>Delete Patient Record</div>", unsafe_allow_html=True)
 
@@ -965,13 +979,13 @@ elif nav == "Delete Record":
     if not patients:
         st.info("No patient records found.")
     else:
-        options = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
+        options  = {f"{p['full_name']} ({p['email']})": p['id'] for p in patients}
         selected = st.selectbox("Select patient to delete", list(options.keys()))
         pid      = options[selected]
         patient  = read_patient_by_id(pid)
 
         if patient:
-            rp = risk_pill(patient['glucose'], patient['haemoglobin'], patient['cholesterol'])
+            rp      = risk_pill(patient['glucose'], patient['haemoglobin'], patient['cholesterol'])
             g_st, g_col, _ = param_status("glucose",     patient['glucose'])
             h_st, h_col, _ = param_status("haemoglobin", patient['haemoglobin'])
             c_st, c_col, _ = param_status("cholesterol", patient['cholesterol'])
@@ -1005,7 +1019,7 @@ elif nav == "Delete Record":
                 </table>
             </div>""", unsafe_allow_html=True)
 
-            st.warning("This action is permanent and cannot be undone.")
+            st.warning("⚠️ This action is permanent and cannot be undone.")
             col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button("Confirm Delete", type="primary"):
