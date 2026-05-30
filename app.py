@@ -1,199 +1,399 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import date, datetime
 
 from database import init_db, create_patient, read_all_patients, read_patient_by_id, update_patient, delete_patient, search_patients
 from ai_predictor import predict_health_condition, get_risk_level
 from validators import validate_patient_form
 
-# PAGE CONFIG
+# ── PAGE CONFIG ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MIRA – Medical Intelligence",
     page_icon="assets/favicon.ico",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 init_db()
 
-# CUSTOM CSS
+# ── CLINICAL THRESHOLDS ───────────────────────────────────────────────────────
+THRESHOLDS = {
+    "glucose":     {"low": 70,   "high": 99,   "max": 300,  "unit": "mg/dL"},
+    "haemoglobin": {"low": 12.0, "high": 17.5, "max": 20.0, "unit": "g/dL"},
+    "cholesterol": {"low": 0,    "high": 200,  "max": 300,  "unit": "mg/dL"},
+}
+
+def param_status(key, value):
+    t = THRESHOLDS[key]
+    if value < t["low"]:
+        return "Low",    "#d97706", "#fffbeb"
+    elif value <= t["high"]:
+        return "Normal", "#059669", "#ecfdf5"
+    else:
+        return "High",   "#dc2626", "#fef2f2"
+
+def bar_color_for_patient(p):
+    """Return per-patient per-parameter colors for the grouped bar chart."""
+    out = {}
+    for key in ("glucose", "haemoglobin", "cholesterol"):
+        _, color, _ = param_status(key, p[key])
+        out[key] = color
+    return out
+
+# ── CUSTOM CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-    --primary:        #1a56db;
-    --primary-light:  #eff6ff;
-    --primary-mid:    #bfdbfe;
-    --accent:         #0891b2;
+    --primary:        #1847c2;
+    --primary-light:  #eef2fd;
+    --primary-mid:    #c0cef8;
     --success:        #059669;
     --success-light:  #ecfdf5;
     --warning:        #d97706;
     --warning-light:  #fffbeb;
     --danger:         #dc2626;
     --danger-light:   #fef2f2;
-    --bg:             #f8fafc;
+    --normal-bar:     #059669;
+    --low-bar:        #d97706;
+    --high-bar:       #dc2626;
+    --bg:             #f0f4f8;
     --bg-white:       #ffffff;
-    --surface:        #f1f5f9;
-    --border:         #e2e8f0;
-    --border-strong:  #cbd5e1;
-    --text-primary:   #0f172a;
-    --text-secondary: #475569;
-    --text-muted:     #94a3b8;
-    --shadow-sm:      0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
-    --shadow-md:      0 4px 16px rgba(15,23,42,0.10), 0 2px 6px rgba(15,23,42,0.06);
-    --shadow-lg:      0 12px 40px rgba(15,23,42,0.12), 0 4px 12px rgba(15,23,42,0.06);
-    --shadow-glow:    0 0 0 3px rgba(26,86,219,0.12);
-    --radius:         14px;
+    --surface:        #f7f9fc;
+    --border:         #dde3ed;
+    --border-strong:  #c4cdd9;
+    --text-primary:   #0c1629;
+    --text-secondary: #4a5568;
+    --text-muted:     #8a97aa;
+    --shadow-sm:      0 1px 4px rgba(12,22,41,0.07);
+    --shadow-md:      0 4px 18px rgba(12,22,41,0.10);
+    --shadow-lg:      0 10px 40px rgba(12,22,41,0.13);
+    --glow:           0 0 0 3px rgba(24,71,194,0.13);
+    --radius:         12px;
     --radius-sm:      8px;
-    --radius-lg:      20px;
+    --radius-lg:      18px;
 }
 
 html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Sora', sans-serif;
     background-color: var(--bg);
     color: var(--text-primary);
 }
 
-/* ── SIDEBAR ── */
+/* ═══ SIDEBAR ═══ */
 [data-testid="stSidebar"] {
     background: var(--bg-white);
     border-right: 1px solid var(--border);
-    box-shadow: 2px 0 12px rgba(15,23,42,0.05);
+    box-shadow: 3px 0 16px rgba(12,22,41,0.06);
 }
 [data-testid="stSidebar"] * { color: var(--text-primary) !important; }
 
-/* ── HEADER ── */
+.sidebar-logo {
+    padding: 28px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+}
+.sidebar-logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+.sidebar-logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, #1847c2, #3b6ff0);
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(24,71,194,0.25);
+}
+.sidebar-logo-name {
+    font-family: 'Sora', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary) !important;
+    letter-spacing: 3px;
+}
+.sidebar-logo-sub {
+    font-size: 0.62rem;
+    color: var(--text-muted) !important;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding-left: 46px;
+}
+
+.nav-section-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--text-muted) !important;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 0 14px 6px;
+}
+
+.sidebar-meta {
+    margin: 16px 0 0;
+    border-top: 1px solid var(--border);
+    padding: 16px 14px 0;
+}
+.sidebar-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 0.73rem;
+    color: var(--text-secondary) !important;
+    border-bottom: 1px solid var(--border);
+}
+.sidebar-meta-row:last-child { border-bottom: none; }
+.sidebar-meta-label {
+    font-weight: 600;
+    color: var(--text-muted) !important;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+.sidebar-meta-val {
+    color: var(--primary) !important;
+    font-weight: 600;
+    font-size: 0.72rem;
+}
+
+/* ═══ HEADER ═══ */
 .mira-header {
     background: var(--bg-white);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: 36px 48px;
-    margin-bottom: 32px;
-    text-align: center;
-    position: relative;
+    padding: 0;
+    margin-bottom: 28px;
     overflow: hidden;
     box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: stretch;
+    min-height: 100px;
 }
-.mira-header::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg,
-        rgba(26,86,219,0.04) 0%,
-        rgba(8,145,178,0.03) 50%,
-        transparent 100%);
-    pointer-events: none;
+.mira-header-stripe {
+    width: 7px;
+    background: linear-gradient(180deg, #1847c2 0%, #3b6ff0 50%, #0891b2 100%);
+    flex-shrink: 0;
 }
-.mira-header::after {
-    content: '';
-    position: absolute;
-    top: -60px; left: 50%;
-    transform: translateX(-50%);
-    width: 320px; height: 120px;
-    background: radial-gradient(ellipse, rgba(26,86,219,0.10) 0%, transparent 70%);
-    pointer-events: none;
-}
-.mira-logo-text {
-    font-family: 'Playfair Display', serif;
-    font-size: 3.2rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #1a56db 0%, #0891b2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: 6px;
-    position: relative;
-}
-.mira-subtitle {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    margin-top: 8px;
-    font-weight: 500;
-    position: relative;
-}
-.mira-tagline-bar {
-    display: inline-flex;
+.mira-header-body {
+    flex: 1;
+    padding: 28px 36px;
+    display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 16px;
+    justify-content: space-between;
+}
+.mira-header-left {}
+.mira-header-title {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 5px;
+    line-height: 1;
+}
+.mira-header-sub {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    margin-top: 5px;
+    font-weight: 400;
+}
+.mira-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+}
+.mira-header-badge {
     background: var(--primary-light);
     border: 1px solid var(--primary-mid);
     border-radius: 100px;
-    padding: 6px 18px;
-    font-size: 0.72rem;
+    padding: 5px 14px;
+    font-size: 0.68rem;
     font-weight: 600;
     color: var(--primary);
     letter-spacing: 1.5px;
     text-transform: uppercase;
 }
-
-/* ── METRIC CARDS ── */
-.metric-box {
-    background: var(--bg-white);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px 20px;
-    text-align: center;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.22s ease, box-shadow 0.22s ease;
-    position: relative;
-    overflow: hidden;
-}
-.metric-box::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: var(--accent-color, #1a56db);
-    border-radius: var(--radius) var(--radius) 0 0;
-}
-.metric-box:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-md);
-}
-.metric-value {
-    font-family: 'DM Mono', monospace;
-    font-size: 2.4rem;
+.mira-header-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--success);
     font-weight: 500;
-    line-height: 1;
-    margin-bottom: 6px;
 }
-.metric-label {
-    font-size: 0.7rem;
+.mira-header-status-dot {
+    width: 7px; height: 7px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.45; }
+}
+
+/* ═══ SECTION TITLE ═══ */
+.section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 1.5px;
-    font-weight: 600;
-}
-
-/* ── SECTION TITLES ── */
-.section-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.15rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    border-bottom: 2px solid var(--border);
+    letter-spacing: 2px;
+    margin-bottom: 16px;
     padding-bottom: 10px;
-    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 10px;
 }
 .section-title::before {
     content: '';
-    display: inline-block;
-    width: 4px;
-    height: 1.15rem;
-    background: linear-gradient(180deg, #1a56db, #0891b2);
+    width: 3px; height: 14px;
+    background: linear-gradient(180deg, var(--primary), #3b6ff0);
     border-radius: 2px;
     flex-shrink: 0;
 }
 
-/* ── CARDS ── */
+/* ═══ METRIC CARDS ═══ */
+.metric-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 20px 18px;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.metric-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--card-color, #1847c2);
+}
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+.metric-number {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 2.2rem;
+    font-weight: 500;
+    color: var(--card-color, #1847c2);
+    line-height: 1;
+    margin-bottom: 6px;
+}
+.metric-title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+}
+.metric-bg-icon {
+    position: absolute;
+    right: 14px; top: 12px;
+    font-size: 2.2rem;
+    opacity: 0.06;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    color: var(--card-color, #1847c2);
+    letter-spacing: -2px;
+}
+
+/* ═══ CHART CARD ═══ */
+.chart-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 20px 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* ═══ LEGEND PILLS ═══ */
+.legend-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    justify-content: center;
+}
+.legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+}
+.legend-dot {
+    width: 9px; height: 9px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+/* ═══ PATIENT TABLE ═══ */
+.pt-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.83rem;
+}
+.pt-table thead th {
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    padding: 10px 14px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    text-align: left;
+}
+.pt-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+.pt-table tbody tr:hover {
+    background: var(--surface);
+}
+.pt-table tbody td {
+    padding: 11px 14px;
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+.pt-table tbody td.name-cell {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.val-cell {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+}
+
+/* ═══ STATUS PILLS ═══ */
+.pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 0.67rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.pill-healthy  { background: #ecfdf5; color: #059669; }
+.pill-moderate { background: #fffbeb; color: #d97706; }
+.pill-high     { background: #fef2f2; color: #dc2626; }
+.pill-normal   { background: #ecfdf5; color: #059669; }
+.pill-low      { background: #fffbeb; color: #d97706; }
+
+/* ═══ MIRA CARD (forms / remarks) ═══ */
 .mira-card {
     background: var(--bg-white);
     border: 1px solid var(--border);
@@ -201,7 +401,7 @@ html, body, [class*="css"] {
     padding: 24px;
     margin-bottom: 16px;
     box-shadow: var(--shadow-sm);
-    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 .mira-card:hover {
     transform: translateY(-2px);
@@ -209,83 +409,61 @@ html, body, [class*="css"] {
     border-color: var(--primary-mid);
 }
 
-/* ── REMARKS / AI BOX ── */
+/* ═══ AI REMARKS ═══ */
 .remarks-box {
-    background: linear-gradient(135deg, #f8fafc, #eff6ff);
-    border: 1px solid var(--primary-mid);
-    border-left: 4px solid var(--primary);
-    border-radius: var(--radius-sm);
-    padding: 18px 20px;
-    font-size: 0.88rem;
-    color: var(--text-secondary);
-    line-height: 1.75;
-    font-weight: 400;
-}
-
-/* ── SIDEBAR BRAND ── */
-.sidebar-brand {
-    text-align: center;
-    padding: 24px 0 12px 0;
-}
-.sidebar-brand-name {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.9rem;
-    font-weight: 700;
-    background: linear-gradient(135deg, #1a56db, #0891b2);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: 4px;
-}
-.sidebar-brand-sub {
-    font-size: 0.6rem;
-    color: var(--text-muted);
-    letter-spacing: 2px;
-    margin-top: 3px;
-    text-transform: uppercase;
-}
-.sidebar-info-block {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
     border-radius: var(--radius-sm);
-    padding: 14px 16px;
-    font-size: 0.76rem;
+    padding: 16px 20px;
+    font-size: 0.86rem;
     color: var(--text-secondary);
-    line-height: 1.8;
+    line-height: 1.78;
 }
-.sidebar-info-label {
-    font-size: 0.65rem;
+.remarks-label {
+    font-size: 0.62rem;
     font-weight: 700;
     color: var(--primary);
     text-transform: uppercase;
     letter-spacing: 1.5px;
-    margin-bottom: 2px;
+    margin-bottom: 8px;
 }
 
-/* ── BUTTONS ── */
+/* ═══ EXPANDER ═══ */
+[data-testid="stExpander"] {
+    background: var(--bg-white) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    overflow: hidden;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s;
+}
+[data-testid="stExpander"]:hover { box-shadow: var(--shadow-md); }
+
+/* ═══ BUTTONS ═══ */
 .stButton > button {
-    background: linear-gradient(135deg, #1a56db 0%, #1d4ed8 100%);
-    color: #ffffff !important;
+    background: linear-gradient(135deg, #1847c2, #2558e0);
+    color: #fff !important;
     border: none;
     border-radius: var(--radius-sm);
-    padding: 11px 28px;
+    padding: 10px 28px;
     font-weight: 600;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     letter-spacing: 0.3px;
-    transition: all 0.22s ease;
+    transition: all 0.2s;
     width: 100%;
-    box-shadow: 0 2px 8px rgba(26,86,219,0.25);
+    box-shadow: 0 2px 10px rgba(24,71,194,0.28);
+    font-family: 'Sora', sans-serif;
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #1e40af 0%, #1a56db 100%);
-    box-shadow: 0 6px 20px rgba(26,86,219,0.35);
+    background: linear-gradient(135deg, #133ba3, #1847c2);
+    box-shadow: 0 6px 20px rgba(24,71,194,0.38);
     transform: translateY(-1px);
 }
-.stButton > button:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(26,86,219,0.2);
-}
+.stButton > button:active { transform: none; }
 
-/* ── FORM INPUTS ── */
+/* ═══ INPUTS ═══ */
 .stTextInput > div > div input,
 .stNumberInput > div > div input,
 .stDateInput > div > div input,
@@ -294,8 +472,8 @@ html, body, [class*="css"] {
     border: 1px solid var(--border-strong) !important;
     border-radius: var(--radius-sm) !important;
     color: var(--text-primary) !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-size: 0.9rem !important;
+    font-family: 'Sora', sans-serif !important;
+    font-size: 0.88rem !important;
     transition: border-color 0.18s, box-shadow 0.18s;
 }
 .stTextInput > div > div input:focus,
@@ -303,26 +481,23 @@ html, body, [class*="css"] {
 .stDateInput > div > div input:focus,
 .stTextArea > div > div textarea:focus {
     border-color: var(--primary) !important;
-    box-shadow: var(--shadow-glow) !important;
+    box-shadow: var(--glow) !important;
 }
 .stSelectbox > div > div {
     background: var(--bg-white) !important;
     border: 1px solid var(--border-strong) !important;
     border-radius: var(--radius-sm) !important;
-    color: var(--text-primary) !important;
 }
-
-/* ── LABELS ── */
-label, .stTextInput label, .stNumberInput label, .stDateInput label, .stTextArea label, .stSelectbox label {
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
+label, .stTextInput label, .stNumberInput label,
+.stDateInput label, .stTextArea label, .stSelectbox label {
+    font-size: 0.74rem !important;
+    font-weight: 700 !important;
     color: var(--text-secondary) !important;
     text-transform: uppercase !important;
     letter-spacing: 0.8px !important;
-    margin-bottom: 4px !important;
 }
 
-/* ── DATAFRAME ── */
+/* ═══ DATAFRAME ═══ */
 div[data-testid="stDataFrame"] {
     border-radius: var(--radius);
     overflow: hidden;
@@ -330,312 +505,365 @@ div[data-testid="stDataFrame"] {
     box-shadow: var(--shadow-sm);
 }
 
-/* ── EXPANDER ── */
-[data-testid="stExpander"] {
-    background: var(--bg-white);
-    border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    overflow: hidden;
-    margin-bottom: 8px;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow 0.2s;
-}
-[data-testid="stExpander"]:hover {
-    box-shadow: var(--shadow-md);
-}
+/* ═══ ALERTS ═══ */
+.stAlert { border-radius: var(--radius-sm) !important; }
 
-/* ── ALERTS ── */
-.stAlert {
-    border-radius: var(--radius-sm) !important;
-}
+/* ═══ HORIZONTAL RULE ═══ */
+hr { border-color: var(--border); margin: 10px 0 18px; }
 
-/* ── HORIZONTAL RULE ── */
-hr {
-    border-color: var(--border);
-    margin: 12px 0 20px 0;
-}
-
-/* ── RADIO (NAV) ── */
+/* ═══ RADIO NAV ═══ */
 [data-testid="stRadio"] label {
-    font-size: 0.85rem !important;
+    font-size: 0.82rem !important;
     font-weight: 500 !important;
     text-transform: none !important;
     letter-spacing: 0 !important;
     color: var(--text-secondary) !important;
-    padding: 8px 10px;
+    padding: 7px 10px;
     border-radius: 7px;
     transition: background 0.15s;
 }
-[data-testid="stRadio"] label:hover {
-    background: var(--surface);
-}
+[data-testid="stRadio"] label:hover { background: var(--surface); }
 
-/* ── CHECKBOX ── */
+/* ═══ CHECKBOX ═══ */
 .stCheckbox label {
     text-transform: none !important;
     letter-spacing: 0 !important;
-    font-size: 0.88rem !important;
+    font-size: 0.86rem !important;
     color: var(--text-primary) !important;
+    font-weight: 400 !important;
 }
 
-/* ── STATUS BADGE ── */
-.badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 100px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-}
-.badge-healthy  { background: var(--success-light); color: var(--success); }
-.badge-moderate { background: var(--warning-light); color: var(--warning); }
-.badge-high     { background: var(--danger-light);  color: var(--danger);  }
-
-/* ── EMPTY STATE ── */
+/* ═══ EMPTY STATE ═══ */
 .empty-state {
     background: var(--bg-white);
     border: 2px dashed var(--border-strong);
     border-radius: var(--radius-lg);
-    padding: 56px 40px;
+    padding: 60px 40px;
     text-align: center;
 }
-.empty-icon {
-    width: 56px; height: 56px;
-    margin: 0 auto 16px;
-    background: var(--primary-light);
-    border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-}
 .empty-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.15rem;
+    font-size: 1.05rem;
+    font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 6px;
 }
-.empty-sub {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-}
+.empty-sub { font-size: 0.83rem; color: var(--text-muted); }
 
-/* ── PATIENT DETAIL TABLE ── */
-.patient-detail-table {
-    width: 100%;
-    font-size: 0.88rem;
-    border-collapse: collapse;
-    color: var(--text-secondary);
+/* ═══ DIVIDER ═══ */
+.mira-divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+/* ═══ DELETE CARD ═══ */
+.delete-card {
+    background: #fff9f9;
+    border: 1px solid #fecaca;
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
 }
-.patient-detail-table td {
-    padding: 8px 12px 8px 0;
-    vertical-align: top;
+.delete-card-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--danger);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+}
+.delete-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.delete-table td {
+    padding: 7px 0;
     width: 50%;
+    color: var(--text-secondary);
+    border-bottom: 1px solid #fde8e8;
 }
-.patient-detail-table td strong {
-    color: var(--text-primary);
-    font-weight: 600;
-}
-
-/* ── DIVIDER LINE ── */
-.mira-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 20px 0;
-}
-
-
+.delete-table td:last-child { border-bottom: none; }
+.delete-table td strong { color: var(--text-primary); font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── SIDEBAR ──────────────────────────────────────────────────────────────────
+# ── HELPER: risk pill HTML ────────────────────────────────────────────────────
+def risk_pill(g, h, c):
+    raw = get_risk_level(g, h, c)
+    if "🔴" in raw:
+        return "<span class='pill pill-high'>High Risk</span>"
+    elif "🟡" in raw:
+        return "<span class='pill pill-moderate'>Moderate</span>"
+    return "<span class='pill pill-healthy'>Healthy</span>"
+
+def clean_md(text):
+    return text.replace("**","").replace("*","").replace("??","").replace("##","").strip()
+
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
-    <div class='sidebar-brand'>
-        <div class='sidebar-brand-name'>MIRA</div>
-        <div class='sidebar-brand-sub'>Medical Intelligence</div>
+    <div class='sidebar-logo'>
+        <div class='sidebar-logo-mark'>
+            <div class='sidebar-logo-icon'>+</div>
+            <div class='sidebar-logo-name'>MIRA</div>
+        </div>
+        <div class='sidebar-logo-sub'>Medical Intelligence Platform</div>
     </div>
-    <hr/>
+    <div class='nav-section-label'>Navigation</div>
     """, unsafe_allow_html=True)
 
-    nav = st.radio(
-        "Navigation",
-        ["Dashboard", "Add Patient", "View Records", "Update Record", "Delete Record"],
-        label_visibility="collapsed"
-    )
+    nav = st.radio("", ["Dashboard", "Add Patient", "View Records",
+                        "Update Record", "Delete Record"],
+                   label_visibility="collapsed")
 
-    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
-    <div class='sidebar-info-block'>
-        <div class='sidebar-info-label'>AI Engine</div>
-        Claude AI by Anthropic
-        <br><br>
-        <div class='sidebar-info-label'>Storage</div>
-        SQLite — Persistent Local DB
-        <br><br>
-        <div class='sidebar-info-label'>Parameters</div>
-        Glucose · Haemoglobin · Cholesterol
+    <div class='sidebar-meta'>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>AI Engine</span>
+            <span class='sidebar-meta-val'>Claude (Anthropic)</span>
+        </div>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>Storage</span>
+            <span class='sidebar-meta-val'>SQLite</span>
+        </div>
+        <div class='sidebar-meta-row'>
+            <span class='sidebar-meta-label'>Version</span>
+            <span class='sidebar-meta-val'>2.0</span>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-# ── HEADER ───────────────────────────────────────────────────────────────────
+# ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown("""
-
-    <div class='mira-logo-text'>MIRA</div>
-    <div class='mira-subtitle'>Medical Intelligence Robotic Automation</div>
-    <div style='display:flex; justify-content:center; margin-top:14px;'>
-        <div class='mira-tagline-bar'>Health Prediction Platform</div>
+<div class='mira-header'>
+    <div class='mira-header-stripe'></div>
+    <div class='mira-header-body'>
+        <div class='mira-header-left'>
+            <div class='mira-header-title'>MIRA</div>
+            <div class='mira-header-sub'>Medical Intelligence &amp; Robotic Automation</div>
+        </div>
+        <div class='mira-header-right'>
+            <div class='mira-header-badge'>Health Prediction Platform</div>
+            <div class='mira-header-status'>
+                <div class='mira-header-status-dot'></div>
+                System Active
+            </div>
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 # DASHBOARD
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 if nav == "Dashboard":
-    patients = read_all_patients()
-    total    = len(patients)
+    patients  = read_all_patients()
+    total     = len(patients)
     high_risk = sum(1 for p in patients if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     moderate  = sum(1 for p in patients if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
     healthy   = sum(1 for p in patients if "🟢" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']))
 
+    # ── KPI ROW ──
     c1, c2, c3, c4 = st.columns(4)
-    metrics = [
-        (total,     "Total Patients", "#1a56db"),
-        (healthy,   "Healthy",        "#059669"),
-        (moderate,  "Moderate Risk",  "#d97706"),
-        (high_risk, "High Risk",      "#dc2626"),
+    kpis = [
+        (total,     "Total Patients", "#1847c2", "T"),
+        (healthy,   "Healthy",        "#059669", "H"),
+        (moderate,  "Moderate Risk",  "#d97706", "M"),
+        (high_risk, "High Risk",      "#dc2626", "!"),
     ]
-    for col, (val, label, color) in zip([c1, c2, c3, c4], metrics):
+    for col, (val, label, color, icon) in zip([c1, c2, c3, c4], kpis):
         col.markdown(f"""
-        <div class='metric-box' style='--accent-color:{color};'>
-            <div class='metric-value' style='color:{color};'>{val}</div>
-            <div class='metric-label'>{label}</div>
+        <div class='metric-card' style='--card-color:{color};'>
+            <div class='metric-bg-icon'>{icon}</div>
+            <div class='metric-number'>{val}</div>
+            <div class='metric-title'>{label}</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if patients:
+    if not patients:
+        st.markdown("""
+        <div class='empty-state'>
+            <div class='empty-title'>No patient records yet</div>
+            <div class='empty-sub'>Use "Add Patient" to register your first patient.</div>
+        </div>""", unsafe_allow_html=True)
+    else:
         col_left, col_right = st.columns([3, 2])
 
+        # ── GROUPED BAR CHART with per-patient per-parameter color coding ──
         with col_left:
             st.markdown("<div class='section-title'>Blood Parameter Overview</div>", unsafe_allow_html=True)
+            st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
+
             df = pd.DataFrame(patients)
+            names = df['full_name'].tolist()
 
-            # Normalise to % of clinical reference ceiling so all three are comparable
-            GLUCOSE_MAX     = 300.0
-            CHOLESTEROL_MAX = 300.0
-            HAEMO_MAX       = 20.0
+            # Reference ceilings for normalisation
+            G_MAX, C_MAX, H_MAX = 300.0, 300.0, 20.0
 
-            names  = df['full_name'].tolist()
-            g_pct  = (df['glucose']     / GLUCOSE_MAX     * 100).tolist()
-            c_pct  = (df['cholesterol'] / CHOLESTEROL_MAX * 100).tolist()
-            h_pct  = (df['haemoglobin'] / HAEMO_MAX       * 100).tolist()
-            g_raw  = df['glucose'].tolist()
-            c_raw  = df['cholesterol'].tolist()
-            h_raw  = df['haemoglobin'].tolist()
+            # Build one Bar trace per parameter, with individual marker colors
+            params = [
+                ("glucose",     "Glucose",     G_MAX, "mg/dL"),
+                ("cholesterol", "Cholesterol", C_MAX, "mg/dL"),
+                ("haemoglobin", "Haemoglobin", H_MAX, "g/dL"),
+            ]
 
             fig = go.Figure()
-            bar_cfg = [
-                ("#1a56db", "Glucose",     g_pct, g_raw, "mg/dL"),
-                ("#d97706", "Cholesterol", c_pct, c_raw, "mg/dL"),
-                ("#059669", "Haemoglobin", h_pct, h_raw, "g/dL"),
-            ]
-            for color, name, pct, raw, unit in bar_cfg:
+            for key, label, max_val, unit in params:
+                raw_vals = df[key].tolist()
+                pct_vals = [v / max_val * 100 for v in raw_vals]
+                # Per-patient color for this parameter
+                colors = [param_status(key, v)[1] for v in raw_vals]
+
                 fig.add_trace(go.Bar(
-                    name=name,
+                    name=label,
                     x=names,
-                    y=pct,
-                    text=[f"{v} {unit}" for v in raw],
+                    y=pct_vals,
+                    text=[f"{v} {unit}" for v in raw_vals],
                     textposition='outside',
-                    textfont=dict(size=10, color='#475569'),
-                    marker=dict(color=color, opacity=0.88,
-                                line=dict(color='white', width=1.5)),
-                    hovertemplate=f"<b>%{{x}}</b><br>{name}: %{{customdata}} {unit}<extra></extra>",
-                    customdata=raw
+                    textfont=dict(size=9.5, color='#4a5568', family='IBM Plex Mono'),
+                    marker=dict(
+                        color=colors,
+                        opacity=0.90,
+                        line=dict(color='white', width=1.5),
+                        cornerradius=4,
+                    ),
+                    hovertemplate=(
+                        f"<b>%{{x}}</b><br>"
+                        f"{label}: <b>%{{customdata}} {unit}</b><br>"
+                        f"% of range: %{{y:.1f}}%<extra></extra>"
+                    ),
+                    customdata=raw_vals,
+                    legendgroup=label,
+                    showlegend=False,  # we'll draw a custom legend below
                 ))
 
             fig.update_layout(
                 barmode='group',
                 paper_bgcolor='white', plot_bgcolor='white',
-                font=dict(color='#475569', family='DM Sans', size=11),
-                legend=dict(bgcolor='white', bordercolor='#e2e8f0', borderwidth=1,
-                            font=dict(size=11), orientation='h',
-                            yanchor='bottom', y=1.02, xanchor='right', x=1),
-                xaxis=dict(showgrid=False, linecolor='#e2e8f0',
-                           tickfont=dict(size=11, color='#0f172a')),
-                yaxis=dict(showgrid=False, showticklabels=False,
-                           range=[0, 130]),
-                bargap=0.25, bargroupgap=0.08,
-                margin=dict(l=0, r=0, t=36, b=0),
-                height=320
+                font=dict(color='#4a5568', family='Sora', size=11),
+                xaxis=dict(showgrid=False, linecolor='#dde3ed',
+                           tickfont=dict(size=11, color='#0c1629')),
+                yaxis=dict(showgrid=False, showticklabels=False, range=[0, 135]),
+                bargap=0.22, bargroupgap=0.06,
+                margin=dict(l=0, r=0, t=12, b=0),
+                height=310,
+                legend=dict(visible=False),
             )
             st.plotly_chart(fig, use_container_width=True)
-            st.markdown("""<div style='font-size:0.72rem;color:#94a3b8;text-align:right;margin-top:-8px;'>
-                Bars normalised to % of reference ceiling — hover for actual values
-            </div>""", unsafe_allow_html=True)
 
+            # Custom legend: parameter names + color status key
+            st.markdown("""
+            <div style='display:flex;justify-content:space-between;align-items:center;
+                        padding:0 4px;margin-top:-6px;'>
+                <div class='legend-row'>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#1847c2'></span>Glucose</span>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Cholesterol</span>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#0891b2'></span>Haemoglobin</span>
+                </div>
+                <div class='legend-row'>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#059669'></span>Normal</span>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#d97706'></span>Low</span>
+                    <span class='legend-pill'><span class='legend-dot' style='background:#dc2626'></span>High</span>
+                </div>
+            </div>
+            <div style='font-size:0.68rem;color:#8a97aa;text-align:right;margin-top:6px;'>
+                Bar color = clinical status &nbsp;|&nbsp; Height = % of reference ceiling &nbsp;|&nbsp; Labels = actual value
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── DONUT CHART ──
         with col_right:
             st.markdown("<div class='section-title'>Risk Distribution</div>", unsafe_allow_html=True)
+            st.markdown("<div class='chart-card'>", unsafe_allow_html=True)
             fig2 = go.Figure(data=[go.Pie(
-                labels=['Healthy', 'Moderate Risk', 'High Risk'],
-                values=[healthy, moderate, high_risk],
-                hole=0.62,
+                labels=['Healthy', 'Moderate', 'High Risk'],
+                values=[healthy if healthy else 0.001,
+                        moderate if moderate else 0.001,
+                        high_risk if high_risk else 0.001],
+                hole=0.65,
                 marker=dict(
                     colors=['#059669', '#d97706', '#dc2626'],
                     line=dict(color='white', width=3)
                 ),
-                textfont=dict(size=12, family='DM Sans'),
-                textinfo='percent+label'
+                textfont=dict(size=11, family='Sora'),
+                textinfo='percent',
+                hovertemplate='<b>%{label}</b><br>%{value} patients<extra></extra>',
             )])
             fig2.update_layout(
                 paper_bgcolor='white', plot_bgcolor='white',
-                font=dict(color='#475569', family='DM Sans'),
-                showlegend=False,
-                margin=dict(l=0, r=0, t=10, b=0),
-                height=280,
+                font=dict(color='#4a5568', family='Sora'),
+                legend=dict(
+                    orientation='v',
+                    bgcolor='white',
+                    font=dict(size=11),
+                    x=0.75, y=0.5,
+                    xanchor='left', yanchor='middle'
+                ),
+                margin=dict(l=0, r=60, t=10, b=10),
+                height=265,
                 annotations=[dict(
-                    text=f"<b>{total}</b>",
-                    x=0.5, y=0.5,
-                    font=dict(size=22, color='#0f172a', family='DM Mono'),
+                    text=f'<b>{total}</b><br><span style="font-size:10px">patients</span>',
+                    x=0.37, y=0.5,
+                    font=dict(size=18, color='#0c1629', family='IBM Plex Mono'),
                     showarrow=False
                 )]
             )
             st.plotly_chart(fig2, use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
+        # ── RECENT PATIENTS TABLE ──
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>Recent Patients</div>", unsafe_allow_html=True)
-        recent = patients[:5]
-        df_display = pd.DataFrame(recent)[['full_name', 'email', 'glucose', 'haemoglobin', 'cholesterol', 'created_at']]
-        df_display['created_at'] = df_display['created_at'].apply(lambda x: x[:10])
-        df_display.columns = ['Name', 'Email', 'Glucose', 'Haemoglobin', 'Cholesterol', 'Added On']
-        df_display['Risk'] = [get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) for p in recent]
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        recent = patients[:6]
+        rows = ""
+        for p in recent:
+            g_st, g_col, _ = param_status("glucose",     p['glucose'])
+            h_st, h_col, _ = param_status("haemoglobin", p['haemoglobin'])
+            c_st, c_col, _ = param_status("cholesterol", p['cholesterol'])
+            rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
+            rows += f"""
+            <tr>
+                <td class='name-cell'>{p['full_name']}</td>
+                <td>{p['email']}</td>
+                <td class='val-cell'><span style='color:{g_col};font-weight:600;'>{p['glucose']}</span>
+                    <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
+                <td class='val-cell'><span style='color:{h_col};font-weight:600;'>{p['haemoglobin']}</span>
+                    <span style='font-size:0.7rem;color:#8a97aa;'> g/dL</span></td>
+                <td class='val-cell'><span style='color:{c_col};font-weight:600;'>{p['cholesterol']}</span>
+                    <span style='font-size:0.7rem;color:#8a97aa;'> mg/dL</span></td>
+                <td>{rp}</td>
+                <td style='color:#8a97aa;font-size:0.78rem;'>{p['created_at'][:10]}</td>
+            </tr>"""
 
-    else:
-        st.markdown("""
-        <div class='empty-state'>
-            <div class='empty-title'>No patient records yet</div>
-            <div class='empty-sub'>Navigate to "Add Patient" to register your first patient.</div>
+        st.markdown(f"""
+        <div style='background:white;border:1px solid var(--border);border-radius:12px;
+                    overflow:hidden;box-shadow:var(--shadow-sm);'>
+        <table class='pt-table'>
+            <thead>
+                <tr>
+                    <th>Patient</th><th>Email</th>
+                    <th>Glucose</th><th>Haemoglobin</th><th>Cholesterol</th>
+                    <th>Risk</th><th>Added</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
         </div>""", unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 # ADD PATIENT
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 elif nav == "Add Patient":
     st.markdown("<div class='section-title'>Register New Patient</div>", unsafe_allow_html=True)
 
     with st.form("add_patient_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            full_name  = st.text_input("Full Name", placeholder="e.g., Dhanapriya D")
-            email      = st.text_input("Email Address", placeholder="e.g., patient@email.com")
-            glucose    = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
-                                          value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
+            full_name   = st.text_input("Full Name", placeholder="e.g., Dhanapriya D")
+            email       = st.text_input("Email Address", placeholder="e.g., patient@email.com")
+            glucose     = st.number_input("Glucose (mg/dL)", min_value=0.0, max_value=600.0,
+                                           value=90.0, step=0.1, help="Normal fasting: 70–99 mg/dL")
         with col2:
-            dob         = st.date_input("Date of Birth", max_value=date.today(),
-                                         value=date(1990, 1, 1))
+            dob         = st.date_input("Date of Birth", max_value=date.today(), value=date(1990, 1, 1))
             haemoglobin = st.number_input("Haemoglobin (g/dL)", min_value=0.0, max_value=25.0,
                                            value=13.5, step=0.1, help="Normal: 12.0–17.5 g/dL")
             cholesterol = st.number_input("Cholesterol (mg/dL)", min_value=0.0, max_value=700.0,
                                            value=180.0, step=0.1, help="Desirable: <200 mg/dL")
-
         st.markdown("<br>", unsafe_allow_html=True)
         _, col_btn, _ = st.columns([1, 2, 1])
         with col_btn:
@@ -645,142 +873,129 @@ elif nav == "Add Patient":
         errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
         if errors:
             for e in errors:
-                st.error(f"{e}")
+                st.error(e)
         else:
-            with st.spinner("MIRA is analyzing patient data..."):
+            with st.spinner("MIRA AI is analyzing patient data..."):
                 try:
                     remarks    = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
                     patient_id = create_patient(full_name, str(dob), email, glucose, haemoglobin, cholesterol, remarks)
                     if patient_id:
-                        risk = get_risk_level(glucose, haemoglobin, cholesterol)
-                        clean = remarks.replace("**","").replace("*","").replace("??","").replace("##","").strip()
-                        st.success(f"Patient {full_name} registered successfully — ID #{patient_id}")
+                        risk = risk_pill(glucose, haemoglobin, cholesterol)
+                        st.success(f"Patient {full_name} registered — ID #{patient_id}")
                         st.markdown(f"""
                         <div class='mira-card'>
-                            <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;'>
-                                <span style='font-family:Playfair Display,serif;font-size:1rem;font-weight:600;color:#0f172a;'>
-                                    AI Health Assessment
-                                </span>
-                                <span style='font-size:0.85rem;'>{risk}</span>
+                            <div style='display:flex;justify-content:space-between;
+                                        align-items:center;margin-bottom:14px;'>
+                                <div>
+                                    <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
+                                                text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;'>
+                                        AI Health Assessment
+                                    </div>
+                                    <div style='font-weight:600;color:#0c1629;font-size:1rem;'>
+                                        {full_name}
+                                    </div>
+                                </div>
+                                {risk}
                             </div>
-                            <div class='remarks-box'>{clean}</div>
+                            <div class='remarks-box'>{clean_md(remarks)}</div>
                         </div>""", unsafe_allow_html=True)
                     else:
                         st.error("A patient with this email already exists.")
                 except Exception as ex:
-                    st.error(f"AI Analysis failed: {str(ex)}")
+                    st.error(f"AI Analysis failed: {ex}")
 
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 # VIEW RECORDS
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 elif nav == "View Records":
     st.markdown("<div class='section-title'>Patient Records</div>", unsafe_allow_html=True)
 
     search_query = st.text_input("Search by name or email", placeholder="Type to search...")
-    patients = search_patients(search_query) if search_query else read_all_patients()
+    patients     = search_patients(search_query) if search_query else read_all_patients()
 
     if not patients:
         st.info("No records found.")
     else:
-        st.markdown(f"""
-        <div style='color:var(--text-muted);font-size:0.8rem;margin-bottom:14px;font-weight:500;'>
-            {len(patients)} record(s) found
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style='font-size:0.72rem;color:#8a97aa;font-weight:600;
+                        text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;'>
+            {len(patients)} record(s) found</div>""", unsafe_allow_html=True)
+
+        def make_gauge(value, label, unit, low_ok, high_ok, max_val, pid_key):
+            status, color, _ = param_status(
+                {"Glucose":"glucose","Haemoglobin":"haemoglobin","Cholesterol":"cholesterol"}[label],
+                value
+            )
+            fig_g = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=value,
+                number=dict(suffix=f" {unit}",
+                            font=dict(size=19, family='IBM Plex Mono', color='#0c1629')),
+                title=dict(
+                    text=f"<b>{label}</b><br><span style='font-size:10px;color:{color};font-weight:700;'>{status}</span>",
+                    font=dict(size=12, family='Sora', color='#4a5568')
+                ),
+                gauge=dict(
+                    axis=dict(range=[0, max_val],
+                              tickfont=dict(size=8, color='#8a97aa'),
+                              tickcolor='#dde3ed'),
+                    bar=dict(color=color, thickness=0.55),
+                    bgcolor='#f0f4f8',
+                    borderwidth=0,
+                    steps=[
+                        dict(range=[0, low_ok],        color='#fffbeb'),
+                        dict(range=[low_ok, high_ok],  color='#ecfdf5'),
+                        dict(range=[high_ok, max_val], color='#fef2f2'),
+                    ],
+                    threshold=dict(line=dict(color=color, width=2),
+                                   thickness=0.75, value=value)
+                )
+            ))
+            fig_g.update_layout(
+                paper_bgcolor='white',
+                margin=dict(l=14, r=14, t=52, b=10),
+                height=195
+            )
+            return fig_g
+
         for p in patients:
-            risk = get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol'])
-            with st.expander(f"#{p['id']}  —  {p['full_name']}  |  {risk}"):
-                # Patient meta info
-                c1, c2 = st.columns(2)
-                c1.markdown(f"**Email:** {p['email']}")
-                c1.markdown(f"**Date of Birth:** {p['date_of_birth']}")
-                c2.markdown(f"**Added:** {p['created_at'][:10]}")
+            rp = risk_pill(p['glucose'], p['haemoglobin'], p['cholesterol'])
+            label_str = p['full_name'] + " — " + ("High Risk" if "🔴" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else ("Moderate" if "🟡" in get_risk_level(p['glucose'], p['haemoglobin'], p['cholesterol']) else "Healthy"))
+
+            with st.expander(f"#{p['id']}  —  {p['full_name']}"):
+                # meta row
+                m1, m2, m3, m4 = st.columns(4)
+                m1.markdown(f"**Email**\n\n{p['email']}")
+                m2.markdown(f"**Date of Birth**\n\n{p['date_of_birth']}")
+                m3.markdown(f"**Added**\n\n{p['created_at'][:10]}")
+                m4.markdown(f"**Risk**")
+                m4.markdown(rp, unsafe_allow_html=True)
 
                 st.markdown("<div class='mira-divider'></div>", unsafe_allow_html=True)
 
-                # Gauge charts — one per parameter
-                def make_gauge(value, label, unit, low_ok, high_ok, max_val, color):
-                    if value < low_ok:
-                        status = "Low"
-                        bar_color = "#d97706"
-                    elif value <= high_ok:
-                        status = "Normal"
-                        bar_color = "#059669"
-                    else:
-                        status = "High"
-                        bar_color = "#dc2626"
-
-                    fig_g = go.Figure(go.Indicator(
-                        mode="gauge+number",
-                        value=value,
-                        number=dict(
-                            suffix=f" {unit}",
-                            font=dict(size=20, family='DM Mono', color='#0f172a')
-                        ),
-                        title=dict(
-                            text=f"<b>{label}</b><br><span style='font-size:11px;color:{bar_color}'>{status}</span>",
-                            font=dict(size=13, family='DM Sans', color='#475569')
-                        ),
-                        gauge=dict(
-                            axis=dict(
-                                range=[0, max_val],
-                                tickfont=dict(size=9, color='#94a3b8'),
-                                tickcolor='#e2e8f0',
-                                showticklabels=True
-                            ),
-                            bar=dict(color=bar_color, thickness=0.6),
-                            bgcolor='#f1f5f9',
-                            borderwidth=0,
-                            steps=[
-                                dict(range=[0, low_ok],         color='#fef9ec'),
-                                dict(range=[low_ok, high_ok],   color='#ecfdf5'),
-                                dict(range=[high_ok, max_val],  color='#fef2f2'),
-                            ],
-                            threshold=dict(
-                                line=dict(color=color, width=2),
-                                thickness=0.75,
-                                value=value
-                            )
-                        )
-                    ))
-                    fig_g.update_layout(
-                        paper_bgcolor='white',
-                        margin=dict(l=16, r=16, t=56, b=16),
-                        height=200
-                    )
-                    return fig_g
-
                 gc1, gc2, gc3 = st.columns(3)
                 with gc1:
-                    st.plotly_chart(
-                        make_gauge(p['glucose'], "Glucose", "mg/dL",
-                                   70, 99, 300, "#1a56db"),
-                        use_container_width=True, key=f"g_{p['id']}"
-                    )
+                    st.plotly_chart(make_gauge(p['glucose'], "Glucose", "mg/dL",
+                                               70, 99, 300, f"g{p['id']}"),
+                                    use_container_width=True, key=f"gauge_g_{p['id']}")
                 with gc2:
-                    st.plotly_chart(
-                        make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL",
-                                   12.0, 17.5, 20, "#059669"),
-                        use_container_width=True, key=f"h_{p['id']}"
-                    )
+                    st.plotly_chart(make_gauge(p['haemoglobin'], "Haemoglobin", "g/dL",
+                                               12.0, 17.5, 20.0, f"h{p['id']}"),
+                                    use_container_width=True, key=f"gauge_h_{p['id']}")
                 with gc3:
-                    st.plotly_chart(
-                        make_gauge(p['cholesterol'], "Cholesterol", "mg/dL",
-                                   0, 200, 300, "#d97706"),
-                        use_container_width=True, key=f"c_{p['id']}"
-                    )
+                    st.plotly_chart(make_gauge(p['cholesterol'], "Cholesterol", "mg/dL",
+                                               0, 200, 300, f"c{p['id']}"),
+                                    use_container_width=True, key=f"gauge_c_{p['id']}")
 
                 if p.get('remarks'):
-                    clean = p['remarks'].replace('**','').replace('*','').replace('??','').strip()
                     st.markdown(f"""
                     <div class='remarks-box' style='margin-top:4px;'>
-                        <strong style='color:#1a56db;font-size:0.75rem;letter-spacing:1px;
-                                       text-transform:uppercase;'>AI Remarks</strong>
-                        <div style='margin-top:8px;'>{clean}</div>
+                        <div class='remarks-label'>AI Clinical Remarks</div>
+                        {clean_md(p['remarks'])}
                     </div>""", unsafe_allow_html=True)
 
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 # UPDATE RECORD
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 elif nav == "Update Record":
     st.markdown("<div class='section-title'>Update Patient Record</div>", unsafe_allow_html=True)
 
@@ -797,20 +1012,18 @@ elif nav == "Update Record":
             with st.form("update_form"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    full_name  = st.text_input("Full Name", value=patient['full_name'])
-                    email      = st.text_input("Email Address", value=patient['email'])
-                    glucose    = st.number_input("Glucose (mg/dL)", value=float(patient['glucose']),
-                                                  min_value=0.0, max_value=600.0, step=0.1)
+                    full_name   = st.text_input("Full Name",    value=patient['full_name'])
+                    email       = st.text_input("Email Address",value=patient['email'])
+                    glucose     = st.number_input("Glucose (mg/dL)",    value=float(patient['glucose']),
+                                                   min_value=0.0, max_value=600.0, step=0.1)
                 with col2:
                     dob_val     = datetime.strptime(patient['date_of_birth'], "%Y-%m-%d").date()
                     dob         = st.date_input("Date of Birth", value=dob_val, max_value=date.today())
                     haemoglobin = st.number_input("Haemoglobin (g/dL)", value=float(patient['haemoglobin']),
                                                    min_value=0.0, max_value=25.0, step=0.1)
-                    cholesterol = st.number_input("Cholesterol (mg/dL)", value=float(patient['cholesterol']),
+                    cholesterol = st.number_input("Cholesterol (mg/dL)",value=float(patient['cholesterol']),
                                                    min_value=0.0, max_value=700.0, step=0.1)
-
                 regen_ai = st.checkbox("Re-run AI Analysis with updated values", value=True)
-
                 _, col_btn, _ = st.columns([1, 2, 1])
                 with col_btn:
                     update_btn = st.form_submit_button("Save Changes", use_container_width=True)
@@ -818,17 +1031,15 @@ elif nav == "Update Record":
             if update_btn:
                 errors = validate_patient_form(full_name, dob, email, glucose, haemoglobin, cholesterol)
                 if errors:
-                    for e in errors:
-                        st.error(f"{e}")
+                    for e in errors: st.error(e)
                 else:
                     remarks = patient.get('remarks', '')
                     if regen_ai:
-                        with st.spinner("Re-analyzing with updated data..."):
+                        with st.spinner("Re-analyzing..."):
                             try:
                                 remarks = predict_health_condition(full_name, str(dob), glucose, haemoglobin, cholesterol)
                             except Exception as ex:
                                 st.warning(f"AI analysis failed — keeping previous remarks. ({ex})")
-
                     success = update_patient(pid, full_name, str(dob), email,
                                              glucose, haemoglobin, cholesterol, remarks)
                     if success:
@@ -836,18 +1047,18 @@ elif nav == "Update Record":
                         if remarks:
                             st.markdown(f"""
                             <div class='mira-card'>
-                                <div style='font-family:Playfair Display,serif;font-size:1rem;
-                                            font-weight:600;color:#0f172a;margin-bottom:12px;'>
+                                <div style='font-size:0.65rem;font-weight:700;color:#8a97aa;
+                                            text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;'>
                                     Updated AI Remarks
                                 </div>
-                                <div class='remarks-box'>{remarks}</div>
+                                <div class='remarks-box'>{clean_md(remarks)}</div>
                             </div>""", unsafe_allow_html=True)
                     else:
-                        st.error("Update failed. The email may already belong to another patient.")
+                        st.error("Update failed. Email may belong to another patient.")
 
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 # DELETE RECORD
-# ════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
 elif nav == "Delete Record":
     st.markdown("<div class='section-title'>Delete Patient Record</div>", unsafe_allow_html=True)
 
@@ -861,26 +1072,35 @@ elif nav == "Delete Record":
         patient  = read_patient_by_id(pid)
 
         if patient:
-            risk = get_risk_level(patient['glucose'], patient['haemoglobin'], patient['cholesterol'])
+            rp = risk_pill(patient['glucose'], patient['haemoglobin'], patient['cholesterol'])
+            g_st, g_col, _ = param_status("glucose",     patient['glucose'])
+            h_st, h_col, _ = param_status("haemoglobin", patient['haemoglobin'])
+            c_st, c_col, _ = param_status("cholesterol", patient['cholesterol'])
+
             st.markdown(f"""
-            <div class='mira-card' style='border-color:#fecaca;'>
-                <div style='font-family:Playfair Display,serif;font-size:1rem;font-weight:600;
-                            color:#0f172a;margin-bottom:16px;'>Patient Details</div>
-                <table class='patient-detail-table'>
+            <div class='delete-card'>
+                <div class='delete-card-title'>Patient to be Deleted</div>
+                <table class='delete-table'>
                     <tr>
                         <td><strong>Name:</strong> {patient['full_name']}</td>
                         <td><strong>Email:</strong> {patient['email']}</td>
                     </tr>
                     <tr>
                         <td><strong>Date of Birth:</strong> {patient['date_of_birth']}</td>
-                        <td><strong>Risk Level:</strong> {risk}</td>
+                        <td><strong>Risk Level:</strong> {rp}</td>
                     </tr>
                     <tr>
-                        <td><strong>Glucose:</strong> {patient['glucose']} mg/dL</td>
-                        <td><strong>Haemoglobin:</strong> {patient['haemoglobin']} g/dL</td>
+                        <td><strong>Glucose:</strong>
+                            <span style='color:{g_col};font-weight:600;'>{patient['glucose']} mg/dL</span>
+                            &nbsp;<span style='font-size:0.7rem;color:{g_col};'>{g_st}</span></td>
+                        <td><strong>Haemoglobin:</strong>
+                            <span style='color:{h_col};font-weight:600;'>{patient['haemoglobin']} g/dL</span>
+                            &nbsp;<span style='font-size:0.7rem;color:{h_col};'>{h_st}</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Cholesterol:</strong> {patient['cholesterol']} mg/dL</td>
+                        <td><strong>Cholesterol:</strong>
+                            <span style='color:{c_col};font-weight:600;'>{patient['cholesterol']} mg/dL</span>
+                            &nbsp;<span style='font-size:0.7rem;color:{c_col};'>{c_st}</span></td>
                         <td></td>
                     </tr>
                 </table>
@@ -891,7 +1111,7 @@ elif nav == "Delete Record":
             with col1:
                 if st.button("Confirm Delete", type="primary"):
                     if delete_patient(pid):
-                        st.success(f"Patient #{pid} — {patient['full_name']} has been deleted.")
+                        st.success(f"Patient #{pid} — {patient['full_name']} deleted.")
                         st.rerun()
                     else:
                         st.error("Deletion failed.")
