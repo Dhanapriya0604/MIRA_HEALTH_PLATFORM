@@ -29,7 +29,7 @@ MedInsight is a health prediction web application built with Python and Streamli
 ## Project Structure
 
 ```
-mira-health-platform/
+medinsight/
 ├── app.py              # Main Streamlit application — UI and navigation
 ├── database.py         # SQLite CRUD operations
 ├── ai_predictor.py     # Groq API health prediction module
@@ -45,8 +45,8 @@ mira-health-platform/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mira-health-platform.git
-cd mira-health-platform
+git clone https://github.com/YOUR_USERNAME/MEDINSIGHT
+cd MEDINSIGHT
 ```
 
 ### 2. Install dependencies
