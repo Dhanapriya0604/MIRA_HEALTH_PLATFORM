@@ -45,7 +45,7 @@ medinsight/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/MEDINSIGHT
+git clone https://github.com/Dhanapriya0604/MEDINSIGHT.git
 cd MEDINSIGHT
 ```
 
